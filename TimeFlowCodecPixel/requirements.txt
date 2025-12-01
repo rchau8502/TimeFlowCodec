@@ -1,5 +1,0 @@
-numpy
-imageio
-PySide6
-pyinstaller
-pytest
