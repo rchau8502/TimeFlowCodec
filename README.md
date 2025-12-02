@@ -1,6 +1,6 @@
 # TimeFlowCodec — Applied Math M.S. Thesis Project
 
-Per-pixel temporal function codec for **RGB video**, developed as an applied mathematics master’s thesis on Pixel Plane Vectorization (PPV) and per-channel temporal regression. Each pixel/channel time series is modeled with constant or linear functions; poorly fit signals fall back to raw storage. The codec demonstrates how simple per-pixel temporal models can compete with block-based approaches on temporally coherent content.
+Per-pixel temporal function codec for **RGB video**, developed as an applied mathematics master’s thesis on Pixel Plane Vectorization (PPV) and per-channel temporal regression. Each pixel/channel time series is modeled with constant or linear functions; poorly fit signals fall back to raw storage. The codec demonstrates how simple per-pixel temporal models can compete with block-based approaches on temporally coherent content. This repository is ready for others to clone, install, and run the codec from CLI or GUI.
 
 ## Thesis Context
 - **Objective:** Study per-pixel temporal regression as a compression primitive and quantify trade-offs between model complexity, error ratios, and payload composition.
@@ -56,6 +56,12 @@ python examples/tfc_decompress.py out.tfc recon.mp4 --fps 30
 python gui.py
 ```
 Two tabs for compression/decompression; configure tau, slope threshold, and payload compression (None/zlib/LZMA).
+
+## Run Tests
+```bash
+pytest
+```
+Synthetic round-trip and model-fitting tests validate the codec behavior.
 
 ## Build Binaries
 Windows:
