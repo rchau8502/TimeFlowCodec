@@ -1,0 +1,5 @@
+\chapter{Reference Implementation}
+The Python reference implements encoder/decoder, format helpers, and CLI/GUI
+wrappers (see `timeflowcodec/`). Encoding: load RGB video, fit per-pixel/channel
+models, choose mode via error ratio, write header + mode tables + payload. The
+decoder reconstructs per channel and writes RGB output.
