@@ -47,6 +47,10 @@ pip install -e .
 pip install build
 python -m build
 ```
+From PyPI (once published):
+```bash
+pip install timeflowcodec
+```
 
 ## CLI Usage
 Install (editable or wheel), then use short commands:
@@ -75,6 +79,14 @@ macOS:
 ```bash
 ./build_mac.sh
 ```
+
+## Publishing to PyPI (maintainers)
+```bash
+pip install -e .[build]
+python -m build
+twine upload dist/*
+```
+After upload, users can `pip install timeflowcodec` and use the CLI/GUI as above.
 
 ## Releases
 - Package metadata is defined in `pyproject.toml` (`timeflowcodec` version `0.1.0`).

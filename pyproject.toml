@@ -22,7 +22,7 @@ timeflowcodec = "timeflowcodec.cli:main"
 
 [project.optional-dependencies]
 gui = ["PySide6"]
-build = ["build"]
+build = ["build", "twine"]
 
 [tool.setuptools.packages.find]
 where = ["."]
