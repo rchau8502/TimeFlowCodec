@@ -49,14 +49,10 @@ python -m build
 ```
 
 ## CLI Usage
-Compress:
-```bash
-python examples/tfc_compress.py input.mp4 out.tfc --tau 0.1 --slope-threshold 1e-3 --payload-comp-type 2
-```
-Decompress:
-```bash
-python examples/tfc_decompress.py out.tfc recon.mp4 --fps 30
-```
+Install (editable or wheel), then use short commands:
+- Compress: `timeflowcompress input.mp4 out.tfc --tau 0.1 --slope-threshold 1e-3 --payload-comp-type 2`
+- Decompress: `timeflowdecompress out.tfc recon.mp4 --fps 30`
+- Subcommands via dispatcher: `timeflowcodec compress ...` or `timeflowcodec decompress ...`
 
 ## GUI
 ```bash

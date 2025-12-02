@@ -15,6 +15,11 @@ dependencies = [
     "imageio",
 ]
 
+[project.scripts]
+timeflowcompress = "timeflowcodec.cli:compress_main"
+timeflowdecompress = "timeflowcodec.cli:decompress_main"
+timeflowcodec = "timeflowcodec.cli:main"
+
 [project.optional-dependencies]
 gui = ["PySide6"]
 build = ["build"]
