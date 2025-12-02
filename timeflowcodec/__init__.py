@@ -15,6 +15,8 @@ from .constants import (
 from .encoder import encode_video_to_tfc
 from .decoder import decode_tfc_to_video
 
+__version__ = "0.1.0"
+
 __all__ = [
     "PLANE_R",
     "PLANE_G",

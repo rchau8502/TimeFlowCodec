@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "timeflowcodec"
+version = "0.1.0"
+description = "Per-pixel RGB temporal function codec (CONST/LINEAR per channel with raw fallback)."
+readme = "README.md"
+authors = [{ name = "Applied Math Thesis" }]
+license = { file = "LICENSE" }
+requires-python = ">=3.9"
+dependencies = [
+    "numpy",
+    "imageio",
+]
+
+[project.optional-dependencies]
+gui = ["PySide6"]
+build = ["build"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["timeflowcodec"]
+
+[tool.setuptools]
+include-package-data = true

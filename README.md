@@ -40,6 +40,13 @@ Temporal coherence (animation, UI captures, low-noise footage). No spatial block
 ```bash
 pip install -r requirements.txt
 ```
+Or install as a package (editable for development):
+```bash
+pip install -e .
+# or build a wheel
+pip install build
+python -m build
+```
 
 ## CLI Usage
 Compress:
@@ -72,6 +79,10 @@ macOS:
 ```bash
 ./build_mac.sh
 ```
+
+## Releases
+- Package metadata is defined in `pyproject.toml` (`timeflowcodec` version `0.1.0`).
+- To publish artifacts, build with `python -m build` and upload your wheel/sdist to your chosen index (e.g., `twine upload dist/*`).
 
 ## Project Layout
 - `timeflowcodec/` – core codec (models, format, encoder/decoder)
