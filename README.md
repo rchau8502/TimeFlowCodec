@@ -1,4 +1,4 @@
-# TimeFlowCodec RGB — Applied Math M.S. Thesis Project
+# TimeFlowCodec — Applied Math M.S. Thesis Project
 
 Per-pixel temporal function codec for **RGB video**, developed as an applied mathematics master’s thesis on Pixel Plane Vectorization (PPV) and per-channel temporal regression. Each pixel/channel time series is modeled with constant or linear functions; poorly fit signals fall back to raw storage. The codec demonstrates how simple per-pixel temporal models can compete with block-based approaches on temporally coherent content.
 
@@ -68,7 +68,7 @@ macOS:
 ```
 
 ## Project Layout
-- `timeflowcodec/` – core RGB codec (models, format, encoder/decoder)
+- `timeflowcodec/` – core codec (models, format, encoder/decoder)
 - `examples/` – CLI wrappers
 - `tests/` – pytest suite for models and encode/decode
 - `gui.py` – PySide6 GUI
