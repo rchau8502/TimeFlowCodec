@@ -23,14 +23,19 @@ def test_encode_decode_roundtrip(monkeypatch, tmp_path):
 
     captured: dict[str, np.ndarray] = {}
 
-    def fake_load_video(path: str, max_frames=None):  # noqa: ARG001
-        return frames
-
     def fake_save_video(arr: np.ndarray, path: str, fps: int = 30):  # noqa: ARG001
         captured["frames"] = arr.copy()
 
-    monkeypatch.setattr("timeflowcodec.utils.load_video_rgb", fake_load_video)
-    monkeypatch.setattr("timeflowcodec.encoder.load_video_rgb", fake_load_video)
+    class FakeReader:
+        def __iter__(self):
+            for f in frames:
+                yield f
+
+    def fake_get_reader(path):  # noqa: ARG001
+        return FakeReader()
+
+    monkeypatch.setattr("timeflowcodec.encoder.imageio.get_reader", fake_get_reader)
+    monkeypatch.setattr("timeflowcodec.encoder._ensure_rgb", lambda f: f)
     monkeypatch.setattr("timeflowcodec.utils.save_video_from_rgb", fake_save_video)
     monkeypatch.setattr("timeflowcodec.decoder.save_video_from_rgb", fake_save_video)
 

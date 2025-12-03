@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import struct
 import numpy as np
+import imageio.v2 as imageio
 
 from .constants import (
     BITS_PER_MODE,
@@ -17,41 +18,32 @@ from .constants import (
     PLANE_R,
 )
 from .format import build_plane_payload, pack_modes, write_header
-from .utils import load_video_rgb
+from .utils import _ensure_rgb  # type: ignore
 
 
-def _encode_plane(channel_data: np.ndarray, channel_u8: np.ndarray, tau: float, slope_threshold: float):
+def _encode_plane_from_stats(sum_s, sum_ts, sum_s2, T: int, tau: float, slope_threshold: float):
     """
-    Vectorized per-plane encode: fit CONST/LINEAR per pixel/channel and gather fallbacks.
+    Vectorized per-plane encode using precomputed sums to avoid storing full video in memory.
     """
-    T, N = channel_data.shape
+    n = float(T)
+    N = sum_s.shape[0]
     modes = np.full((N,), MODE_FB_RAW, dtype=np.uint8)
     tfc_params: dict[int, dict] = {}
-    fb_params: dict[int, np.ndarray] = {}
 
-    n = float(T)
     sum_t = n * (n - 1.0) / 2.0
     sum_t2 = (n - 1.0) * n * (2.0 * n - 1.0) / 6.0
-    t = np.arange(T, dtype=np.float64)
-
-    sum_s = np.sum(channel_data, axis=0, dtype=np.float64)
-    sum_ts = np.sum(channel_data * t[:, None], axis=0, dtype=np.float64)
     denom = n * sum_t2 - sum_t * sum_t
-    if denom == 0.0:
-        b = np.zeros_like(sum_s, dtype=np.float64)
-    else:
-        b = (n * sum_ts - sum_t * sum_s) / denom
+    b = np.where(denom == 0.0, 0.0, (n * sum_ts - sum_t * sum_s) / denom)
     a = (sum_s - b * sum_t) / n
 
-    s_lin = a[None, :] + b[None, :] * t[:, None]
-    diff = channel_data - s_lin
-    D_tfc = np.mean(diff * diff, axis=0)
-    D_sig = np.mean(channel_data * channel_data, axis=0) + 1e-8
+    rss = sum_s2 - 2 * a * sum_s - 2 * b * sum_ts + (a * a) * n + 2 * a * b * sum_t + (b * b) * sum_t2
+    D_tfc = rss / n
+    D_sig = sum_s2 / n + 1e-8
     r = D_tfc / D_sig
 
     modeled = r <= tau
     const_mask = modeled & (np.abs(b) < slope_threshold)
-    zero_mask = ~np.any(channel_data != 0, axis=0)
+    zero_mask = sum_s2 == 0
     const_mask |= zero_mask
     linear_mask = modeled & (~const_mask)
     fallback_mask = ~(const_mask | linear_mask)
@@ -63,10 +55,8 @@ def _encode_plane(channel_data: np.ndarray, channel_u8: np.ndarray, tau: float, 
         tfc_params[idx] = {"mode": MODE_TFC_CONST, "a": float(a[idx])}
     for idx in np.nonzero(linear_mask)[0]:
         tfc_params[idx] = {"mode": MODE_TFC_LINEAR, "a": float(a[idx]), "b": float(b[idx])}
-    for idx in np.nonzero(fallback_mask)[0]:
-        fb_params[idx] = channel_u8[:, idx].copy()
 
-    return modes, tfc_params, fb_params, int(const_mask.sum()), int(linear_mask.sum()), int(fallback_mask.sum())
+    return modes, tfc_params, fallback_mask, int(const_mask.sum()), int(linear_mask.sum()), int(fallback_mask.sum())
 
 
 def encode_video_to_tfc(
@@ -79,28 +69,87 @@ def encode_video_to_tfc(
 ) -> None:
     """
     Encode an RGB video into .tfc using per-pixel temporal modeling per channel.
+    Streaming implementation to reduce memory usage.
     """
 
-    frames = load_video_rgb(input_path, max_frames=max_frames)
-    T, H, W, _ = frames.shape
+    reader = imageio.get_reader(input_path)
+    frames_iter = iter(reader)
+    try:
+        first = next(frames_iter)
+    except StopIteration as exc:  # noqa: B904
+        raise ValueError("No frames found in input video") from exc
+    first_rgb = _ensure_rgb(first)
+    H, W, _ = first_rgb.shape
     N = H * W
-    flat_u8 = frames.reshape(T, N, 3)
-    flat = flat_u8.astype(np.float32)
+
+    # Stats per plane
+    sum_s = [np.zeros((N,), dtype=np.float64) for _ in range(3)]
+    sum_ts = [np.zeros((N,), dtype=np.float64) for _ in range(3)]
+    sum_s2 = [np.zeros((N,), dtype=np.float64) for _ in range(3)]
+
+    t = 0
+    frames_consumed = 0
+
+    def accumulate(frame_arr: np.ndarray, t_idx: int) -> None:
+        flat = frame_arr.reshape(-1, 3).astype(np.float64)
+        for c in range(3):
+            ch = flat[:, c]
+            sum_s[c] += ch
+            sum_ts[c] += ch * t_idx
+            sum_s2[c] += ch * ch
+
+    accumulate(first_rgb, t)
+    frames_consumed += 1
+
+    for frame in frames_iter:
+        if max_frames is not None and frames_consumed >= max_frames:
+            break
+        t += 1
+        accumulate(_ensure_rgb(frame), t)
+        frames_consumed += 1
+
+    T = frames_consumed
 
     plane_results = {}
+    fallback_indices = {}
     for plane, name in zip((PLANE_R, PLANE_G, PLANE_B), "RGB"):
-        modes, tfc_params, fb_params, c_const, c_lin, c_raw = _encode_plane(
-            flat[:, :, plane], flat_u8[:, :, plane], tau, slope_threshold
+        modes, tfc_params, fb_mask, c_const, c_lin, c_raw = _encode_plane_from_stats(
+            sum_s[plane], sum_ts[plane], sum_s2[plane], T, tau, slope_threshold
         )
         plane_results[plane] = {
             "modes": modes,
             "tfc_params": tfc_params,
-            "fb_params": fb_params,
+            "fb_params": {},  # filled later if needed
             "counts": (c_const, c_lin, c_raw),
         }
-        print(
-            f"Plane {name}: Const={c_const}, Linear={c_lin}, Raw={c_raw}"
-        )
+        fallback_indices[plane] = np.nonzero(fb_mask)[0]
+        print(f"Plane {name}: Const={c_const}, Linear={c_lin}, Raw={c_raw}")
+
+    # Collect fallback samples only for required pixels (second pass)
+    needs_fb = any(len(fallback_indices[p]) > 0 for p in (PLANE_R, PLANE_G, PLANE_B))
+    if needs_fb:
+        fb_buffers = {}
+        for plane in (PLANE_R, PLANE_G, PLANE_B):
+            idxs = fallback_indices[plane]
+            fb_buffers[plane] = np.empty((len(idxs), T), dtype=np.uint8)
+
+        reader2 = imageio.get_reader(input_path)
+        for frame_idx, frame in enumerate(reader2):
+            if frame_idx >= T:
+                break
+            flat = _ensure_rgb(frame).reshape(-1, 3).astype(np.uint8)
+            for plane in (PLANE_R, PLANE_G, PLANE_B):
+                idxs = fallback_indices[plane]
+                if len(idxs) == 0:
+                    continue
+                fb_buffers[plane][:, frame_idx] = flat[idxs, plane]
+
+        for plane in (PLANE_R, PLANE_G, PLANE_B):
+            idxs = fallback_indices[plane]
+            fb_params = {}
+            for buf_idx, pix_idx in enumerate(idxs):
+                fb_params[int(pix_idx)] = fb_buffers[plane][buf_idx].copy()
+            plane_results[plane]["fb_params"] = fb_params
 
     header = {
         "version": 1,
