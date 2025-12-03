@@ -89,7 +89,7 @@ class MainWindow(QMainWindow):
 
         self.comp_combo = QComboBox()
         self.comp_combo.addItems(["None", "zlib", "LZMA"])
-        self.comp_combo.setCurrentIndex(2)
+        self.comp_combo.setCurrentIndex(1)
 
         grid.addWidget(QLabel("Input video"), 0, 0)
         grid.addWidget(self.in_video_edit, 0, 1)

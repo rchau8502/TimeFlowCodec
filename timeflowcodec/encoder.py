@@ -17,46 +17,56 @@ from .constants import (
     PLANE_R,
 )
 from .format import build_plane_payload, pack_modes, write_header
-from .models import fit_linear_time_model, reconstruct_linear_sequence
-from .utils import load_video_rgb, mse
+from .utils import load_video_rgb
 
 
-def _encode_plane(channel_data: np.ndarray, tau: float, slope_threshold: float, zeros: np.ndarray):
+def _encode_plane(channel_data: np.ndarray, channel_u8: np.ndarray, tau: float, slope_threshold: float):
+    """
+    Vectorized per-plane encode: fit CONST/LINEAR per pixel/channel and gather fallbacks.
+    """
     T, N = channel_data.shape
-    modes = np.zeros((N,), dtype=np.uint8)
+    modes = np.full((N,), MODE_FB_RAW, dtype=np.uint8)
     tfc_params: dict[int, dict] = {}
     fb_params: dict[int, np.ndarray] = {}
-    count_const = count_linear = count_raw = 0
 
-    for p in range(N):
-        s = channel_data[:, p]
-        if not np.any(s):
-            modes[p] = MODE_TFC_CONST
-            tfc_params[p] = {"mode": MODE_TFC_CONST, "a": 0.0}
-            count_const += 1
-            continue
+    n = float(T)
+    sum_t = n * (n - 1.0) / 2.0
+    sum_t2 = (n - 1.0) * n * (2.0 * n - 1.0) / 6.0
+    t = np.arange(T, dtype=np.float64)
 
-        a, b = fit_linear_time_model(s)
-        s_lin = reconstruct_linear_sequence(a, b, T)
-        D_tfc = mse(s, s_lin)
-        D_sig = mse(s, zeros) + 1e-8
-        r = D_tfc / D_sig
+    sum_s = np.sum(channel_data, axis=0, dtype=np.float64)
+    sum_ts = np.sum(channel_data * t[:, None], axis=0, dtype=np.float64)
+    denom = n * sum_t2 - sum_t * sum_t
+    if denom == 0.0:
+        b = np.zeros_like(sum_s, dtype=np.float64)
+    else:
+        b = (n * sum_ts - sum_t * sum_s) / denom
+    a = (sum_s - b * sum_t) / n
 
-        if r <= tau:
-            if abs(b) < slope_threshold:
-                modes[p] = MODE_TFC_CONST
-                tfc_params[p] = {"mode": MODE_TFC_CONST, "a": float(a)}
-                count_const += 1
-            else:
-                modes[p] = MODE_TFC_LINEAR
-                tfc_params[p] = {"mode": MODE_TFC_LINEAR, "a": float(a), "b": float(b)}
-                count_linear += 1
-        else:
-            modes[p] = MODE_FB_RAW
-            fb_params[p] = s.astype(np.uint8).copy()
-            count_raw += 1
+    s_lin = a[None, :] + b[None, :] * t[:, None]
+    diff = channel_data - s_lin
+    D_tfc = np.mean(diff * diff, axis=0)
+    D_sig = np.mean(channel_data * channel_data, axis=0) + 1e-8
+    r = D_tfc / D_sig
 
-    return modes, tfc_params, fb_params, count_const, count_linear, count_raw
+    modeled = r <= tau
+    const_mask = modeled & (np.abs(b) < slope_threshold)
+    zero_mask = ~np.any(channel_data != 0, axis=0)
+    const_mask |= zero_mask
+    linear_mask = modeled & (~const_mask)
+    fallback_mask = ~(const_mask | linear_mask)
+
+    modes[const_mask] = MODE_TFC_CONST
+    modes[linear_mask] = MODE_TFC_LINEAR
+
+    for idx in np.nonzero(const_mask)[0]:
+        tfc_params[idx] = {"mode": MODE_TFC_CONST, "a": float(a[idx])}
+    for idx in np.nonzero(linear_mask)[0]:
+        tfc_params[idx] = {"mode": MODE_TFC_LINEAR, "a": float(a[idx]), "b": float(b[idx])}
+    for idx in np.nonzero(fallback_mask)[0]:
+        fb_params[idx] = channel_u8[:, idx].copy()
+
+    return modes, tfc_params, fb_params, int(const_mask.sum()), int(linear_mask.sum()), int(fallback_mask.sum())
 
 
 def encode_video_to_tfc(
@@ -64,7 +74,7 @@ def encode_video_to_tfc(
     output_path: str,
     tau: float = DEFAULT_TAU,
     slope_threshold: float = DEFAULT_SLOPE_THRESHOLD,
-    payload_comp_type: int = 2,
+    payload_comp_type: int = 1,
     max_frames: int | None = None,
 ) -> None:
     """
@@ -74,14 +84,13 @@ def encode_video_to_tfc(
     frames = load_video_rgb(input_path, max_frames=max_frames)
     T, H, W, _ = frames.shape
     N = H * W
-    flat = frames.reshape(T, N, 3).astype(np.float32)
-
-    zeros = np.zeros((T,), dtype=np.float32)
+    flat_u8 = frames.reshape(T, N, 3)
+    flat = flat_u8.astype(np.float32)
 
     plane_results = {}
     for plane, name in zip((PLANE_R, PLANE_G, PLANE_B), "RGB"):
         modes, tfc_params, fb_params, c_const, c_lin, c_raw = _encode_plane(
-            flat[:, :, plane], tau, slope_threshold, zeros
+            flat[:, :, plane], flat_u8[:, :, plane], tau, slope_threshold
         )
         plane_results[plane] = {
             "modes": modes,

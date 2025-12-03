@@ -19,7 +19,7 @@ def compress_main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--payload-comp-type",
         type=int,
-        default=2,
+        default=1,
         choices=[0, 1, 2],
         help="Payload compression: 0=none, 1=zlib, 2=LZMA",
     )

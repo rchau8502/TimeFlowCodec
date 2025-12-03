@@ -51,7 +51,7 @@ From PyPI (once published):
 ```bash
 pip install timeflowcodec
 ```
-Dependencies include `imageio[ffmpeg]`, which bundles a static ffmpeg backend so video I/O works without extra manual installs.
+Dependencies include `imageio[ffmpeg]`, which bundles a static ffmpeg backend so video I/O works without extra manual installs. Default payload compression is zlib for speed; choose LZMA if you prefer maximum compression over runtime.
 
 ## CLI Usage
 Install (editable or wheel), then use short commands:
