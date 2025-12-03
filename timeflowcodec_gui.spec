@@ -25,7 +25,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name='timeflowcodec_gui',
+    name='timeflowcodec_gui_bin',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
