@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+*.eggs/
+
+# Virtual envs
+.venv/
+.env/
+
+# Build outputs
+build/
+dist/
+*.spec
+!timeflowcodec_gui.spec
+
+# OS
+.DS_Store
