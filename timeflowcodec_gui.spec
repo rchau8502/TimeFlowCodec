@@ -25,7 +25,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name='timeflowcodec_gui_bin',
+    name='TimeFlowCodec',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -34,13 +34,14 @@ exe = EXE(
     runtime_tmpdir=None,
     console=False,
 )
-coll = COLLECT(
+
+app = BUNDLE(
     exe,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
-    strip=False,
-    upx=True,
-    upx_exclude=[],
-    name='timeflowcodec_gui',
+    name='TimeFlowCodec.app',
+    icon=None,
+    bundle_identifier='com.timeflowcodec.gui',
+    info_plist=None,
+    manifest=None,
+    resources=[],
+    target_arch=None,
 )
