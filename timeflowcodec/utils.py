@@ -22,7 +22,13 @@ def load_video_rgb(path: str, max_frames: int | None = None) -> np.ndarray:
     """
     Load a video file as uint8 RGB frames with shape (T, H, W, 3).
     """
-    reader = imageio.get_reader(path)
+    try:
+        reader = imageio.get_reader(path)
+    except Exception as exc:  # noqa: BLE001
+        raise RuntimeError(
+            "Could not open video. Ensure ffmpeg plugin is available. "
+            "Dependency imageio[ffmpeg] should auto-install a static ffmpeg binary."
+        ) from exc
     frames = []
     for idx, frame in enumerate(reader):
         if max_frames is not None and idx >= max_frames:

@@ -12,7 +12,7 @@ license = { file = "LICENSE" }
 requires-python = ">=3.9"
 dependencies = [
     "numpy",
-    "imageio",
+    "imageio[ffmpeg]",
 ]
 
 [project.scripts]
