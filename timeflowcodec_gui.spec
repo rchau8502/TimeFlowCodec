@@ -2,13 +2,24 @@
 
 block_cipher = None
 
+from PyInstaller.utils.hooks import collect_all
+
+datas = []
+binaries = []
+hiddenimports = []
+
+for pkg in ("imageio", "imageio_ffmpeg"):
+    _d, _b, _h = collect_all(pkg)
+    datas += _d
+    binaries += _b
+    hiddenimports += _h
 
 a = Analysis(
     ['gui.py'],
     pathex=['.'],
-    binaries=[],
-    datas=[],
-    hiddenimports=['timeflowcodec'],
+    binaries=binaries,
+    datas=datas,
+    hiddenimports=['timeflowcodec'] + hiddenimports,
     hookspath=[],
     runtime_hooks=[],
     excludes=[],
