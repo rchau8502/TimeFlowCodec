@@ -1,11 +1,16 @@
-# TimeFlowCodec — Applied Math M.S. Thesis Project
+# TimeFlowCodec — Per-Pixel Temporal Codec for UI/Animation
 
-Per-pixel temporal function codec for **RGB video**, developed as an applied mathematics master’s thesis on Pixel Plane Vectorization (PPV) and per-channel temporal regression. Each pixel/channel time series is modeled with constant or linear functions; poorly fit signals fall back to raw storage. The codec demonstrates how simple per-pixel temporal models can compete with block-based approaches on temporally coherent content. This repository includes both the runnable codec (CLI/GUI) and a LaTeX thesis describing the design, bitstream, and evaluation.
+Wedge: excels on **UI/animation/temporally coherent content** with per-channel temporal fits (CONST/LINEAR) and raw fallback. Transparent math, easy parallelism. Includes runnable codec (CLI/GUI), benchmark harness, and thesis.
 
-## Thesis Context
-- **Objective:** Study per-pixel temporal regression as a compression primitive and quantify trade-offs between model complexity, error ratios, and payload composition.
-- **Method:** For each pixel/channel, fit closed-form least-squares linear models; select CONST vs LINEAR via slope threshold, or RAW when relative error exceeds `tau`.
-- **Contribution:** End-to-end reference implementation (encoder, decoder, container format), reproducible tests, CLI/GUI tooling, and PyInstaller build artifacts.
+## Scoreboard (regen with `make bench`)
+| codec | preset | crf | clip | size (bytes) | psnr | ssim |
+|---|---|---|---|---|---|---|
+| (run `python -m timeflowcodec.bench --clips clips --out bench_out --codecs tfc,x264 --presets medium --crf 23` to populate) |
+
+## Where it wins / fails
+- Wins: UI captures, slides, animation, low-noise static cams (high temporal coherence).
+- Fails: heavy noise, high-motion camera, complex textures (many pixels fall back to raw).
+- Transparent: per-pixel regression, no motion search, no chroma subsampling.
 
 ## Core Idea
 For RGB video `V(t, y, x, c)` (channels `c ∈ {R,G,B}`):
@@ -53,9 +58,17 @@ pip install timeflowcodec
 ```
 Dependencies include `imageio[ffmpeg]`, which bundles a static ffmpeg backend so video I/O works without extra manual installs. Default payload compression is zlib for speed; choose LZMA if you prefer maximum compression over runtime.
 
+## Quickstart (under 2 minutes)
+```bash
+make install
+timeflowcompress input.mp4 out.tfc --tau 0.1 --slope-threshold 1e-3 --payload-comp-type 1
+timeflowdecompress out.tfc recon.mp4 --fps 30
+```
+GUI: `python gui.py`
+
 ## CLI Usage
 Install (editable or wheel), then use short commands:
-- Compress: `timeflowcompress input.mp4 out.tfc --tau 0.1 --slope-threshold 1e-3 --payload-comp-type 2`
+- Compress: `timeflowcompress input.mp4 out.tfc --tau 0.1 --slope-threshold 1e-3 --payload-comp-type 1`
 - Decompress: `timeflowdecompress out.tfc recon.mp4 --fps 30`
 - Subcommands via dispatcher: `timeflowcodec compress ...` or `timeflowcodec decompress ...`
 
@@ -64,6 +77,13 @@ Install (editable or wheel), then use short commands:
 python gui.py
 ```
 Two tabs for compression/decompression; configure tau, slope threshold, and payload compression (None/zlib/LZMA).
+
+## Reproduce benchmarks
+```bash
+# Prepare clips (see clips/README.md)
+python -m timeflowcodec.bench --clips clips --out bench_out --codecs tfc,x264,x265,av1 --presets fast,medium --crf 18,23,28
+```
+Outputs: `bench_out/results.json`, `bench_out/report.md`, `bench_out/plots/`.
 
 ## Run Tests
 ```bash
@@ -81,14 +101,6 @@ macOS:
 ./build_mac.sh
 ```
 
-## Publishing to PyPI (maintainers)
-```bash
-pip install -e .[build]
-python -m build
-twine upload dist/*
-```
-After upload, users can `pip install timeflowcodec` and use the CLI/GUI as above.
-
 ## Releases
 - Package metadata is defined in `pyproject.toml` (`timeflowcodec` version `0.1.0`).
 - To publish artifacts, build with `python -m build` and upload your wheel/sdist to your chosen index (e.g., `twine upload dist/*`).
@@ -100,6 +112,8 @@ After upload, users can `pip install timeflowcodec` and use the CLI/GUI as above
 - `gui.py` – PySide6 GUI
 - `timeflowcodec_gui.spec` – PyInstaller spec
 - `main.tex`, `chapters/`, `appendices/`, `bibliography.bib`, `figures/` – LaTeX thesis materials
+- `timeflowcodec/bench.py` – benchmark harness
+- `clips/README.md` – guidance on sample clips (use git LFS if adding)
 
 ## Notes
 - Strictly RGB; no YUV420 conversion.

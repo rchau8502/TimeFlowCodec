@@ -23,6 +23,8 @@ timeflowcodec = "timeflowcodec.cli:main"
 [project.optional-dependencies]
 gui = ["PySide6"]
 build = ["build", "twine"]
+bench = ["matplotlib"]
+dev = ["ruff", "pytest"]
 
 [tool.setuptools.packages.find]
 where = ["."]
@@ -30,3 +32,8 @@ include = ["timeflowcodec"]
 
 [tool.setuptools]
 include-package-data = true
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+select = ["E", "F", "I"]

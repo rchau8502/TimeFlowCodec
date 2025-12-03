@@ -18,3 +18,8 @@ dist/
 
 # OS
 .DS_Store
+
+# Bench/Clips
+bench_out/
+clips/*.mp4
+clips/*.mkv
