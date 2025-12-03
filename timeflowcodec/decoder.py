@@ -1,7 +1,11 @@
-"""RGB per-pixel decoder for TimeFlowCodec."""
+"""RGB per-pixel decoder for TimeFlowCodec (streaming)."""
 from __future__ import annotations
 
 import struct
+import warnings
+from pathlib import Path
+
+import imageio.v2 as imageio
 import numpy as np
 
 from .constants import (
@@ -16,40 +20,15 @@ from .constants import (
 )
 from .format import parse_plane_payload, read_header, unpack_modes
 from .models import reconstruct_constant_sequence, reconstruct_linear_sequence
-from .utils import save_video_from_rgb
-
-
-def _reconstruct_plane(modes, tfc_params, fb_params, T: int, N: int) -> np.ndarray:
-    flat = np.zeros((T, N), dtype=np.uint8)
-    for p in range(N):
-        mode = int(modes[p])
-        if mode == MODE_TFC_CONST:
-            param = tfc_params.get(p)
-            if param is None:
-                raise ValueError(f"Missing params for pixel {p} (CONST)")
-            s_hat = reconstruct_constant_sequence(float(param["a"]), T)
-        elif mode == MODE_TFC_LINEAR:
-            param = tfc_params.get(p)
-            if param is None:
-                raise ValueError(f"Missing params for pixel {p} (LINEAR)")
-            s_hat = reconstruct_linear_sequence(float(param["a"]), float(param.get("b", 0.0)), T)
-        elif mode == MODE_FB_RAW:
-            seq = fb_params.get(p)
-            if seq is None:
-                raise ValueError(f"Missing raw data for pixel {p}")
-            s_hat = seq.astype(np.float32)
-        else:
-            raise ValueError(f"Unknown mode {mode} for pixel {p}")
-        flat[:, p] = np.clip(np.rint(s_hat), 0, 255).astype(np.uint8)
-    return flat
 
 
 def decode_tfc_to_video(
     input_path: str,
     output_path: str,
     fps: int = 30,
+    stream_output: bool = True,
 ) -> None:
-    """Decode .tfc RGB file back into an RGB video."""
+    """Decode .tfc RGB file back into an RGB video. Streams frames to writer when stream_output=True."""
 
     with open(input_path, "rb") as f:
         header = read_header(f)
@@ -92,14 +71,4 @@ def decode_tfc_to_video(
         plane_modes[plane] = modes
         plane_params[plane] = (tfc_params, fb_params)
 
-    frames = np.zeros((T, H, W, 3), dtype=np.uint8)
-    flat = frames.reshape(T, W * H, 3)
-
-    for plane in (PLANE_R, PLANE_G, PLANE_B):
-        modes = plane_modes[plane]
-        tfc_params, fb_params = plane_params[plane]
-        channel_flat = _reconstruct_plane(modes, tfc_params, fb_params, T, N)
-        flat[:, :, plane] = channel_flat
-
-    save_video_from_rgb(frames, output_path, fps=fps)
-    print(f"Decoded {input_path} -> {output_path}. Frames={T}, Size={H}x{W}")
+    # Precompute per-pixel a/b arrays for const/linear to avoid dict lookups in loop\n+    a_params = np.zeros((3, N), dtype=np.float32)\n+    b_params = np.zeros((3, N), dtype=np.float32)\n+    mode_arrays = np.zeros((3, N), dtype=np.uint8)\n+    fallback_arrays = {}\n+\n+    for plane in (PLANE_R, PLANE_G, PLANE_B):\n+        modes = plane_modes[plane]\n+        tfc_params, fb_params = plane_params[plane]\n+        mode_arrays[plane] = modes\n+        for idx, param in tfc_params.items():\n+            a_params[plane, int(idx)] = float(param[\"a\"])\n+            b_params[plane, int(idx)] = float(param.get(\"b\", 0.0))\n+        if fb_params:\n+            # stack fallback for fast lookup\n+            fb_arr = np.zeros((len(fb_params), T), dtype=np.uint8)\n+            fb_indices = np.array(sorted(fb_params.keys()), dtype=np.int64)\n+            for row, pix in enumerate(fb_indices):\n+                fb_arr[row] = fb_params[int(pix)]\n+            fallback_arrays[plane] = (fb_indices, fb_arr)\n+\n+    if stream_output:\n+        writer = imageio.get_writer(output_path, fps=fps)\n+        t_range = np.arange(T, dtype=np.float32)\n+        flat_frame = np.empty((N, 3), dtype=np.float32)\n+        for t in range(T):\n+            for plane in (PLANE_R, PLANE_G, PLANE_B):\n+                modes = mode_arrays[plane]\n+                flat_vals = np.empty((N,), dtype=np.float32)\n+                const_mask = modes == MODE_TFC_CONST\n+                lin_mask = modes == MODE_TFC_LINEAR\n+                fb_mask = modes == MODE_FB_RAW\n+                if np.any(const_mask):\n+                    flat_vals[const_mask] = a_params[plane, const_mask]\n+                if np.any(lin_mask):\n+                    flat_vals[lin_mask] = a_params[plane, lin_mask] + b_params[plane, lin_mask] * t_range[t]\n+                if np.any(fb_mask):\n+                    fb_idx, fb_arr = fallback_arrays.get(plane, (np.array([], dtype=np.int64), np.empty((0, T), dtype=np.uint8)))\n+                    if fb_arr.size:\n+                        # map fb_idx positions\n+                        fb_map = {pix: row for row, pix in enumerate(fb_idx)}\n+                        for pix in np.nonzero(fb_mask)[0]:\n+                            flat_vals[pix] = fb_arr[fb_map[int(pix)], t]\n+                flat_frame[:, plane] = flat_vals\n+            frame_u8 = np.clip(np.rint(flat_frame.reshape(H, W, 3)), 0, 255).astype(np.uint8)\n+            writer.append_data(frame_u8)\n+        writer.close()\n+    else:\n+        frames = np.zeros((T, H, W, 3), dtype=np.uint8)\n+        flat = frames.reshape(T, W * H, 3)\n+        t_range = np.arange(T, dtype=np.float32)\n+        for plane in (PLANE_R, PLANE_G, PLANE_B):\n+            modes = mode_arrays[plane]\n+            const_mask = modes == MODE_TFC_CONST\n+            lin_mask = modes == MODE_TFC_LINEAR\n+            fb_mask = modes == MODE_FB_RAW\n+            flat_vals = np.zeros((T, N), dtype=np.float32)\n+            if np.any(const_mask):\n+                flat_vals[:, const_mask] = a_params[plane, const_mask]\n+            if np.any(lin_mask):\n+                flat_vals[:, lin_mask] = a_params[plane, lin_mask][None, :] + b_params[plane, lin_mask][None, :] * t_range[:, None]\n+            if np.any(fb_mask):\n+                fb_idx, fb_arr = fallback_arrays.get(plane, (np.array([], dtype=np.int64), np.empty((0, T), dtype=np.uint8)))\n+                if fb_arr.size:\n+                    fb_map = {pix: row for row, pix in enumerate(fb_idx)}\n+                    for pix in np.nonzero(fb_mask)[0]:\n+                        flat_vals[:, pix] = fb_arr[fb_map[int(pix)]]\n+            flat[:, :, plane] = np.clip(np.rint(flat_vals), 0, 255).astype(np.uint8)\n+        # for tests / legacy\n+        import timeflowcodec.utils as utils\n+        utils.save_video_from_rgb(frames, output_path, fps=fps)\n+\n+    print(f\"Decoded {input_path} -> {output_path}. Frames={T}, Size={H}x{W}\")\n*** End Patch

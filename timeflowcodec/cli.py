@@ -24,6 +24,16 @@ def compress_main(argv: list[str] | None = None) -> None:
         help="Payload compression: 0=none, 1=zlib, 2=LZMA",
     )
     parser.add_argument("--max-frames", type=int, default=None, help="Limit number of frames processed")
+    parser.add_argument("--window", type=int, default=None, help="Sliding window (frames) for processing")
+    parser.add_argument("--tiling", type=int, default=None, help="Tile size (e.g., 16 or 32) to share params")
+    parser.add_argument("--max-ram-mb", type=int, default=None, help="Soft RAM cap; warns when exceeded")
+    parser.add_argument(
+        "--dtype",
+        type=str,
+        default="uint8",
+        choices=["uint8", "uint16", "float16"],
+        help="Internal dtype for accumulation (uint8 recommended)",
+    )
     args = parser.parse_args(argv)
 
     encode_video_to_tfc(
@@ -33,6 +43,10 @@ def compress_main(argv: list[str] | None = None) -> None:
         slope_threshold=args.slope_threshold,
         payload_comp_type=args.payload_comp_type,
         max_frames=args.max_frames,
+        window=args.window,
+        tiling=args.tiling,
+        max_ram_mb=args.max_ram_mb,
+        dtype=args.dtype,
     )
 
 

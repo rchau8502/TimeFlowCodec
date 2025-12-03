@@ -141,6 +141,10 @@ class MainWindow(QMainWindow):
             self.tau_spin.value(),
             self.slope_spin.value(),
             comp_idx,
+            None,
+            None,
+            None,
+            "uint8",
         )
         self.encode_worker.progress.connect(self.compress_progress.setValue)
         self.encode_worker.finished_success.connect(self._on_compress_done)
