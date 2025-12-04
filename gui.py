@@ -1,4 +1,5 @@
 """PySide6 GUI for RGB TimeFlowCodec."""
+
 from __future__ import annotations
 
 import sys
@@ -22,7 +23,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from timeflowcodec import decode_tfc_to_video, encode_video_to_tfc
+from timeflowcodec import decode_tfc_to_video, encode_video_to_tfc, get_version_string
 
 
 class CodecWorker(QThread):
@@ -51,6 +52,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("TimeFlowCodec RGB (Per-Pixel)")
+        self.version_label = QLabel(get_version_string())
 
         tabs = QTabWidget()
         tabs.addTab(self._build_compress_tab(), "Compress")
@@ -69,11 +71,17 @@ class MainWindow(QMainWindow):
 
         self.in_video_edit = QLineEdit()
         browse_in = QPushButton("Browse…")
-        browse_in.clicked.connect(lambda: self._browse_file(self.in_video_edit, "Video Files (*.mp4 *.avi *.mov *.*)"))
+        browse_in.clicked.connect(
+            lambda: self._browse_file(
+                self.in_video_edit, "Video Files (*.mp4 *.avi *.mov *.*)"
+            )
+        )
 
         self.out_tfc_edit = QLineEdit()
         browse_out = QPushButton("Browse…")
-        browse_out.clicked.connect(lambda: self._browse_save(self.out_tfc_edit, "TFC Files (*.tfc)"))
+        browse_out.clicked.connect(
+            lambda: self._browse_save(self.out_tfc_edit, "TFC Files (*.tfc)")
+        )
 
         self.tau_spin = QDoubleSpinBox()
         self.tau_spin.setDecimals(4)
@@ -121,6 +129,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(start_btn)
         layout.addWidget(self.compress_progress)
         layout.addWidget(self.compress_status)
+        layout.addWidget(self.version_label)
         widget.setLayout(layout)
         return widget
 
@@ -145,6 +154,7 @@ class MainWindow(QMainWindow):
             None,
             None,
             "uint8",
+            2,
         )
         self.encode_worker.progress.connect(self.compress_progress.setValue)
         self.encode_worker.finished_success.connect(self._on_compress_done)
@@ -171,11 +181,17 @@ class MainWindow(QMainWindow):
 
         self.in_tfc_edit = QLineEdit()
         browse_in = QPushButton("Browse…")
-        browse_in.clicked.connect(lambda: self._browse_file(self.in_tfc_edit, "TFC Files (*.tfc)"))
+        browse_in.clicked.connect(
+            lambda: self._browse_file(self.in_tfc_edit, "TFC Files (*.tfc)")
+        )
 
         self.out_video_edit = QLineEdit()
         browse_out = QPushButton("Browse…")
-        browse_out.clicked.connect(lambda: self._browse_save(self.out_video_edit, "Video Files (*.mp4 *.avi *.mov *.*)"))
+        browse_out.clicked.connect(
+            lambda: self._browse_save(
+                self.out_video_edit, "Video Files (*.mp4 *.avi *.mov *.*)"
+            )
+        )
 
         self.fps_spin = QSpinBox()
         self.fps_spin.setRange(1, 240)
@@ -240,12 +256,16 @@ class MainWindow(QMainWindow):
         self.decode_worker = None
 
     def _browse_file(self, line_edit: QLineEdit, filter_str: str):
-        path, _ = QFileDialog.getOpenFileName(self, "Select file", str(Path.home()), filter_str)
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Select file", str(Path.home()), filter_str
+        )
         if path:
             line_edit.setText(path)
 
     def _browse_save(self, line_edit: QLineEdit, filter_str: str):
-        path, _ = QFileDialog.getSaveFileName(self, "Save file", str(Path.home()), filter_str)
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Save file", str(Path.home()), filter_str
+        )
         if path:
             line_edit.setText(path)
 

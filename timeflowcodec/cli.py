@@ -1,4 +1,5 @@
 """Command-line entrypoints for TimeFlowCodec."""
+
 from __future__ import annotations
 
 import argparse
@@ -6,15 +7,23 @@ import argparse
 from . import DEFAULT_SLOPE_THRESHOLD, DEFAULT_TAU
 from .decoder import decode_tfc_to_video
 from .encoder import encode_video_to_tfc
+from .version import get_version_string
 
 
 def compress_main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(description="TimeFlowCodec RGB encoder (per-pixel)")
+    parser = argparse.ArgumentParser(
+        description="TimeFlowCodec RGB encoder (per-pixel)"
+    )
     parser.add_argument("input", help="Input video path")
     parser.add_argument("output", help="Output .tfc path")
-    parser.add_argument("--tau", type=float, default=DEFAULT_TAU, help="Error ratio threshold")
     parser.add_argument(
-        "--slope-threshold", type=float, default=DEFAULT_SLOPE_THRESHOLD, help="Slope threshold for const mode"
+        "--tau", type=float, default=DEFAULT_TAU, help="Error ratio threshold"
+    )
+    parser.add_argument(
+        "--slope-threshold",
+        type=float,
+        default=DEFAULT_SLOPE_THRESHOLD,
+        help="Slope threshold for const mode",
     )
     parser.add_argument(
         "--payload-comp-type",
@@ -23,10 +32,24 @@ def compress_main(argv: list[str] | None = None) -> None:
         choices=[0, 1, 2],
         help="Payload compression: 0=none, 1=zlib, 2=LZMA",
     )
-    parser.add_argument("--max-frames", type=int, default=None, help="Limit number of frames processed")
-    parser.add_argument("--window", type=int, default=None, help="Sliding window (frames) for processing")
-    parser.add_argument("--tiling", type=int, default=None, help="Tile size (e.g., 16 or 32) to share params")
-    parser.add_argument("--max-ram-mb", type=int, default=None, help="Soft RAM cap; warns when exceeded")
+    parser.add_argument(
+        "--max-frames", type=int, default=None, help="Limit number of frames processed"
+    )
+    parser.add_argument(
+        "--window",
+        type=int,
+        default=None,
+        help="Sliding window (frames) for processing",
+    )
+    parser.add_argument(
+        "--tiling",
+        type=int,
+        default=None,
+        help="Tile size (e.g., 16 or 32) to share params",
+    )
+    parser.add_argument(
+        "--max-ram-mb", type=int, default=None, help="Soft RAM cap; warns when exceeded"
+    )
     parser.add_argument(
         "--dtype",
         type=str,
@@ -51,7 +74,9 @@ def compress_main(argv: list[str] | None = None) -> None:
 
 
 def decompress_main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(description="TimeFlowCodec RGB decoder (per-pixel)")
+    parser = argparse.ArgumentParser(
+        description="TimeFlowCodec RGB decoder (per-pixel)"
+    )
     parser.add_argument("input", help="Input .tfc path")
     parser.add_argument("output", help="Output video path")
     parser.add_argument("--fps", type=int, default=30, help="Output frames per second")
@@ -62,7 +87,10 @@ def decompress_main(argv: list[str] | None = None) -> None:
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="TimeFlowCodec (per-pixel RGB)")
-    sub = parser.add_subparsers(dest="cmd", required=True)
+    parser.add_argument(
+        "--version", action="store_true", help="Show version/build info and exit"
+    )
+    sub = parser.add_subparsers(dest="cmd", required=False)
 
     p_enc = sub.add_parser("compress", help="Compress video to .tfc")
     p_enc.add_argument("input")
@@ -70,7 +98,26 @@ def main(argv: list[str] | None = None) -> None:
     p_enc.add_argument("--tau", type=float, default=DEFAULT_TAU)
     p_enc.add_argument("--slope-threshold", type=float, default=DEFAULT_SLOPE_THRESHOLD)
     p_enc.add_argument("--payload-comp-type", type=int, default=2, choices=[0, 1, 2])
+    p_enc.add_argument(
+        "--container-version",
+        type=int,
+        default=2,
+        choices=[1, 2],
+        help="Container version (2 preferred)",
+    )
     p_enc.add_argument("--max-frames", type=int, default=None)
+    p_enc.add_argument(
+        "--window", type=int, default=None, help="Sliding window (frames)"
+    )
+    p_enc.add_argument(
+        "--tiling", type=int, default=None, help="Tile size to share params"
+    )
+    p_enc.add_argument(
+        "--max-ram-mb", type=int, default=None, help="Soft RAM cap; warns when exceeded"
+    )
+    p_enc.add_argument(
+        "--dtype", type=str, default="uint8", choices=["uint8", "uint16", "float16"]
+    )
 
     p_dec = sub.add_parser("decompress", help="Decompress .tfc to video")
     p_dec.add_argument("input")
@@ -79,6 +126,10 @@ def main(argv: list[str] | None = None) -> None:
 
     args = parser.parse_args(argv)
 
+    if getattr(args, "version", False):
+        print(get_version_string())
+        return
+
     if args.cmd == "compress":
         encode_video_to_tfc(
             args.input,
@@ -86,12 +137,17 @@ def main(argv: list[str] | None = None) -> None:
             tau=args.tau,
             slope_threshold=args.slope_threshold,
             payload_comp_type=args.payload_comp_type,
+            container_version=args.container_version,
             max_frames=args.max_frames,
+            window=args.window,
+            tiling=args.tiling,
+            max_ram_mb=args.max_ram_mb,
+            dtype=args.dtype,
         )
     elif args.cmd == "decompress":
         decode_tfc_to_video(args.input, args.output, fps=args.fps)
     else:
-        parser.error("Unknown command")
+        parser.error("Specify 'compress' or 'decompress' (or use --version)")
 
 
 if __name__ == "__main__":

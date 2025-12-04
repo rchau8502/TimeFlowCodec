@@ -14,8 +14,7 @@ from .constants import (
 )
 from .encoder import encode_video_to_tfc
 from .decoder import decode_tfc_to_video
-
-__version__ = "0.1.0"
+from .version import __version__, get_version_string, get_build_meta
 
 __all__ = [
     "PLANE_R",
@@ -31,4 +30,7 @@ __all__ = [
     "BITS_PER_MODE",
     "encode_video_to_tfc",
     "decode_tfc_to_video",
+    "get_version_string",
+    "get_build_meta",
+    "__version__",
 ]
