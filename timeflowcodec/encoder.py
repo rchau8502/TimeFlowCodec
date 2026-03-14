@@ -32,6 +32,29 @@ from .utils import _ensure_rgb  # type: ignore
 from .version import get_build_meta
 
 
+def _apply_macbook_profile_defaults(
+    *,
+    payload_comp_type: int,
+    tiling: int | None,
+    max_ram_mb: int | None,
+    dtype: str,
+    scene_cut: str,
+) -> tuple[int, int | None, int | None, str, str]:
+    """Apply conservative defaults for Apple Silicon laptops."""
+    if payload_comp_type == 2:
+        # LZMA can be very slow and memory-heavy on laptop-class CPUs.
+        payload_comp_type = 1
+    if tiling is None:
+        tiling = 16
+    if max_ram_mb is None:
+        max_ram_mb = 1536
+    if dtype not in {"uint8", "uint16"}:
+        dtype = "uint8"
+    if scene_cut == "off":
+        scene_cut = "auto"
+    return payload_comp_type, tiling, max_ram_mb, dtype, scene_cut
+
+
 def _tile_indices(H: int, W: int, tile: int) -> tuple[np.ndarray, int, int]:
     tiles_y = (H + tile - 1) // tile
     tiles_x = (W + tile - 1) // tile
@@ -120,10 +143,22 @@ def encode_video_to_tfc(
     dtype: str = "uint8",
     scene_cut: str = "off",
     scene_threshold: float = 0.35,
+    macbook_profile: bool = False,
 ) -> None:
     """
     Streaming RGB encoder with bounded memory and optional scene-cut segmentation.
     """
+
+    if macbook_profile:
+        payload_comp_type, tiling, max_ram_mb, dtype, scene_cut = (
+            _apply_macbook_profile_defaults(
+                payload_comp_type=payload_comp_type,
+                tiling=tiling,
+                max_ram_mb=max_ram_mb,
+                dtype=dtype,
+                scene_cut=scene_cut,
+            )
+        )
 
     dtype_map = {"uint8": np.uint8, "uint16": np.uint16, "float16": np.float16}
     if dtype not in dtype_map:

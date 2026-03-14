@@ -66,6 +66,13 @@ timeflowdecompress out.tfc recon.mp4 --fps 30
 ```
 GUI: `python gui.py`
 
+### MacBook quick profile
+Use the low-memory, laptop-friendly profile:
+```bash
+timeflowcompress input.mp4 out.tfc --macbook-profile
+```
+This applies safer defaults (`tiling=16`, `max_ram_mb=1536`, `zlib`, `scene_cut=auto`) and avoids heavy settings that cause lag on Apple Silicon laptops.
+
 ## CLI Usage
 Install (editable or wheel), then use short commands:
 - Compress: `timeflowcompress input.mp4 out.tfc --tau 0.1 --slope-threshold 1e-3 --payload-comp-type 1`
@@ -100,6 +107,7 @@ macOS:
 ```bash
 ./build_mac.sh
 ```
+This produces `dist/TimeFlowCodec.app` and `dist/TimeFlowCodec_macbook_installer.dmg`.
 
 ## Releases
 - Package metadata is defined in `pyproject.toml` (`timeflowcodec` version `0.1.0`).

@@ -57,6 +57,11 @@ def compress_main(argv: list[str] | None = None) -> None:
         choices=["uint8", "uint16", "float16"],
         help="Internal dtype for accumulation (uint8 recommended)",
     )
+    parser.add_argument(
+        "--macbook-profile",
+        action="store_true",
+        help="Apply MacBook-friendly defaults (tiling/max-ram/zlib/scene-cut)",
+    )
     args = parser.parse_args(argv)
 
     encode_video_to_tfc(
@@ -70,6 +75,7 @@ def compress_main(argv: list[str] | None = None) -> None:
         tiling=args.tiling,
         max_ram_mb=args.max_ram_mb,
         dtype=args.dtype,
+        macbook_profile=args.macbook_profile,
     )
 
 
@@ -118,6 +124,11 @@ def main(argv: list[str] | None = None) -> None:
     p_enc.add_argument(
         "--dtype", type=str, default="uint8", choices=["uint8", "uint16", "float16"]
     )
+    p_enc.add_argument(
+        "--macbook-profile",
+        action="store_true",
+        help="Apply MacBook-friendly defaults (tiling/max-ram/zlib/scene-cut)",
+    )
 
     p_dec = sub.add_parser("decompress", help="Decompress .tfc to video")
     p_dec.add_argument("input")
@@ -143,6 +154,7 @@ def main(argv: list[str] | None = None) -> None:
             tiling=args.tiling,
             max_ram_mb=args.max_ram_mb,
             dtype=args.dtype,
+            macbook_profile=args.macbook_profile,
         )
     elif args.cmd == "decompress":
         decode_tfc_to_video(args.input, args.output, fps=args.fps)

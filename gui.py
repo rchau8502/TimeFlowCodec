@@ -8,6 +8,7 @@ from pathlib import Path
 from PySide6.QtCore import QThread, Signal
 from PySide6.QtWidgets import (
     QApplication,
+    QCheckBox,
     QComboBox,
     QDoubleSpinBox,
     QFileDialog,
@@ -98,6 +99,8 @@ class MainWindow(QMainWindow):
         self.comp_combo = QComboBox()
         self.comp_combo.addItems(["None", "zlib", "LZMA"])
         self.comp_combo.setCurrentIndex(1)
+        self.macbook_profile_checkbox = QCheckBox("MacBook optimized profile")
+        self.macbook_profile_checkbox.setChecked(True)
 
         grid.addWidget(QLabel("Input video"), 0, 0)
         grid.addWidget(self.in_video_edit, 0, 1)
@@ -115,6 +118,7 @@ class MainWindow(QMainWindow):
 
         grid.addWidget(QLabel("Payload compression"), 4, 0)
         grid.addWidget(self.comp_combo, 4, 1)
+        grid.addWidget(self.macbook_profile_checkbox, 5, 1)
 
         layout.addLayout(grid)
 
@@ -147,14 +151,12 @@ class MainWindow(QMainWindow):
             encode_video_to_tfc,
             input_path,
             output_path,
-            self.tau_spin.value(),
-            self.slope_spin.value(),
-            comp_idx,
-            None,
-            None,
-            None,
-            "uint8",
-            2,
+            tau=self.tau_spin.value(),
+            slope_threshold=self.slope_spin.value(),
+            payload_comp_type=comp_idx,
+            container_version=2,
+            dtype="uint8",
+            macbook_profile=self.macbook_profile_checkbox.isChecked(),
         )
         self.encode_worker.progress.connect(self.compress_progress.setValue)
         self.encode_worker.finished_success.connect(self._on_compress_done)
