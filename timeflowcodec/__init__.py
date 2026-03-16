@@ -1,4 +1,5 @@
 """RGB TimeFlowCodec per-pixel temporal modeling."""
+
 from .constants import (
     PLANE_R,
     PLANE_G,
@@ -6,6 +7,7 @@ from .constants import (
     MODE_TFC_LINEAR,
     MODE_TFC_CONST,
     MODE_FB_RAW,
+    MODE_TFC_MATRIX,
     MODE_RESERVED,
     DEFAULT_TAU,
     DEFAULT_SLOPE_THRESHOLD,
@@ -23,6 +25,7 @@ __all__ = [
     "MODE_TFC_LINEAR",
     "MODE_TFC_CONST",
     "MODE_FB_RAW",
+    "MODE_TFC_MATRIX",
     "MODE_RESERVED",
     "DEFAULT_TAU",
     "DEFAULT_SLOPE_THRESHOLD",

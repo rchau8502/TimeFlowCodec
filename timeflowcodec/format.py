@@ -10,7 +10,13 @@ from typing import Dict, Tuple
 
 import numpy as np
 
-from .constants import BITS_PER_MODE, COLOR_FORMAT_RGB, MODE_TFC_CONST, MODE_TFC_LINEAR
+from .constants import (
+    BITS_PER_MODE,
+    COLOR_FORMAT_RGB,
+    MODE_TFC_CONST,
+    MODE_TFC_LINEAR,
+    MODE_TFC_MATRIX,
+)
 
 MAGIC = b"TFC1"
 VERSION_V1 = 1
@@ -311,6 +317,7 @@ def build_plane_payload_v2(
         modes: np.ndarray = seg["modes"]
         tfc_params: Dict[int, Dict[str, float]] = seg["tfc_params"]
         fb_params: Dict[int, np.ndarray] = seg["fb_params"]
+        matrix_params: list[dict] = seg.get("matrix_params", [])
         T = int(seg["length"])
 
         mode_bytes = pack_modes(modes, bits_per_mode=BITS_PER_MODE)
@@ -338,6 +345,34 @@ def build_plane_payload_v2(
             a_q = np.uint8(np.clip(round(param["a"]), 0, 255))
             b_q = int(np.clip(round(param.get("b", 0.0) / b_scale), -32768, 32767))
             buf.write(struct.pack("<IBh", pixel_index, a_q, b_q))
+
+        # MATRIX stream (low-rank rank-1 tile factors)
+        buf.write(struct.pack("<I", len(matrix_params)))
+        for m in matrix_params:
+            pixel_indices = np.asarray(m["pixel_indices"], dtype=np.uint32)
+            temporal = np.asarray(m["temporal"], dtype=np.float32).reshape(T)
+            spatial = np.asarray(m["spatial"], dtype=np.float32).reshape(
+                pixel_indices.size
+            )
+            mean = float(m["mean"])
+
+            t_abs = float(np.max(np.abs(temporal))) if temporal.size else 0.0
+            s_abs = float(np.max(np.abs(spatial))) if spatial.size else 0.0
+            t_scale = t_abs / 32767.0 if t_abs > 0 else 1.0
+            s_scale = s_abs / 32767.0 if s_abs > 0 else 1.0
+            temporal_q = np.clip(np.rint(temporal / t_scale), -32768, 32767).astype(
+                np.int16
+            )
+            spatial_q = np.clip(np.rint(spatial / s_scale), -32768, 32767).astype(
+                np.int16
+            )
+
+            buf.write(
+                struct.pack("<Ifff", int(pixel_indices.size), mean, t_scale, s_scale)
+            )
+            buf.write(temporal_q.tobytes())
+            buf.write(pixel_indices.tobytes())
+            buf.write(spatial_q.tobytes())
 
         fb_items = sorted(fb_params.items(), key=lambda kv: kv[0])
         buf.write(struct.pack("<I", len(fb_items)))
@@ -368,6 +403,7 @@ def parse_plane_payload_v2(comp_payload: bytes, payload_comp_type: int, N: int):
 
         tfc_params: Dict[int, Dict[str, float]] = {}
         fb_params: Dict[int, np.ndarray] = {}
+        matrix_params: list[dict] = []
 
         const_count_raw = bio.read(4)
         if len(const_count_raw) != 4:
@@ -395,6 +431,37 @@ def parse_plane_payload_v2(comp_payload: bytes, payload_comp_type: int, N: int):
                 "b": float(b_q) * float(b_scale),
             }
 
+        matrix_count_raw = bio.read(4)
+        if len(matrix_count_raw) != 4:
+            raise ValueError("Incomplete matrix header")
+        matrix_count = struct.unpack("<I", matrix_count_raw)[0]
+        for _ in range(matrix_count):
+            matrix_hdr = bio.read(16)
+            if len(matrix_hdr) != 16:
+                raise ValueError("Incomplete matrix entry header")
+            p_count, mean, t_scale, s_scale = struct.unpack("<Ifff", matrix_hdr)
+            temporal_q_raw = bio.read(2 * T)
+            if len(temporal_q_raw) != 2 * T:
+                raise ValueError("Incomplete matrix temporal")
+            temporal_q = np.frombuffer(temporal_q_raw, dtype=np.int16).copy()
+            pixel_indices_raw = bio.read(4 * p_count)
+            if len(pixel_indices_raw) != 4 * p_count:
+                raise ValueError("Incomplete matrix pixel indices")
+            pixel_indices = np.frombuffer(pixel_indices_raw, dtype=np.uint32).copy()
+            spatial_q_raw = bio.read(2 * p_count)
+            if len(spatial_q_raw) != 2 * p_count:
+                raise ValueError("Incomplete matrix spatial")
+            spatial_q = np.frombuffer(spatial_q_raw, dtype=np.int16).copy()
+            matrix_params.append(
+                {
+                    "mode": MODE_TFC_MATRIX,
+                    "pixel_indices": pixel_indices.astype(np.int64),
+                    "mean": float(mean),
+                    "temporal": temporal_q.astype(np.float32) * float(t_scale),
+                    "spatial": spatial_q.astype(np.float32) * float(s_scale),
+                }
+            )
+
         raw_count_raw = bio.read(4)
         if len(raw_count_raw) != 4:
             raise ValueError("Incomplete raw header")
@@ -414,6 +481,7 @@ def parse_plane_payload_v2(comp_payload: bytes, payload_comp_type: int, N: int):
                 "length": T,
                 "modes": modes,
                 "tfc_params": tfc_params,
+                "matrix_params": matrix_params,
                 "fb_params": fb_params,
             }
         )

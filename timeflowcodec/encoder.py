@@ -18,6 +18,7 @@ from .constants import (
     MODE_FB_RAW,
     MODE_TFC_CONST,
     MODE_TFC_LINEAR,
+    MODE_TFC_MATRIX,
     PLANE_B,
     PLANE_G,
     PLANE_R,
@@ -55,6 +56,29 @@ def _apply_macbook_profile_defaults(
     return payload_comp_type, tiling, max_ram_mb, dtype, scene_cut
 
 
+def _fit_rank1_matrix(
+    matrix: np.ndarray,
+) -> tuple[float, np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Fit X ~= mean + outer(temporal, spatial) with rank-1 SVD.
+    Returns mean, temporal vector, spatial vector, reconstructed matrix.
+    """
+    x = matrix.astype(np.float32, copy=False)
+    mean = float(np.mean(x))
+    centered = x - mean
+    if np.allclose(centered, 0.0):
+        temporal = np.zeros((x.shape[0],), dtype=np.float32)
+        spatial = np.zeros((x.shape[1],), dtype=np.float32)
+        recon = np.full_like(x, mean, dtype=np.float32)
+        return mean, temporal, spatial, recon
+    u, s, vt = np.linalg.svd(centered, full_matrices=False)
+    scale = float(np.sqrt(s[0]))
+    temporal = (u[:, 0] * scale).astype(np.float32, copy=False)
+    spatial = (vt[0, :] * scale).astype(np.float32, copy=False)
+    recon = mean + np.outer(temporal, spatial)
+    return mean, temporal, spatial, recon.astype(np.float32, copy=False)
+
+
 def _tile_indices(H: int, W: int, tile: int) -> tuple[np.ndarray, int, int]:
     tiles_y = (H + tile - 1) // tile
     tiles_x = (W + tile - 1) // tile
@@ -71,19 +95,28 @@ def _tile_indices(H: int, W: int, tile: int) -> tuple[np.ndarray, int, int]:
 
 
 def _encode_plane_from_stats(
-    sum_s, sum_ts, sum_s2, T: int, tau: float, slope_threshold: float
+    sum_s,
+    sum_ts,
+    sum_s2,
+    tile_pixel_counts: np.ndarray,
+    T: int,
+    tau: float,
+    slope_threshold: float,
 ):
     """
     Vectorized per-plane encode using precomputed sums to avoid storing frames.
     Returns per-pixel modes/params and fallback mask (bool array).
     """
-    n = float(T)
     N = sum_s.shape[0]
+    p_counts = tile_pixel_counts.astype(np.float64, copy=False)
+    n = p_counts * float(T)
     modes = np.full((N,), MODE_FB_RAW, dtype=np.uint8)
     tfc_params: dict[int, dict] = {}
 
-    sum_t = n * (n - 1.0) / 2.0
-    sum_t2 = (n - 1.0) * n * (2.0 * n - 1.0) / 6.0
+    sum_t_base = float(T) * (float(T) - 1.0) / 2.0
+    sum_t2_base = (float(T) - 1.0) * float(T) * (2.0 * float(T) - 1.0) / 6.0
+    sum_t = p_counts * sum_t_base
+    sum_t2 = p_counts * sum_t2_base
     denom = n * sum_t2 - sum_t * sum_t
     b = np.where(denom == 0.0, 0.0, (n * sum_ts - sum_t * sum_s) / denom)
     a = (sum_s - b * sum_t) / n
@@ -144,6 +177,9 @@ def encode_video_to_tfc(
     scene_cut: str = "off",
     scene_threshold: float = 0.35,
     macbook_profile: bool = False,
+    matrix_mode: bool = False,
+    matrix_tau: float = 0.12,
+    matrix_rate_ratio: float = 0.95,
 ) -> None:
     """
     Streaming RGB encoder with bounded memory and optional scene-cut segmentation.
@@ -167,12 +203,28 @@ def encode_video_to_tfc(
                 scene_cut=scene_cut,
             )
         )
+        matrix_mode = True if not matrix_mode else matrix_mode
 
     dtype_map = {"uint8": np.uint8, "uint16": np.uint16, "float16": np.float16}
     if dtype not in dtype_map:
         raise ValueError("Unsupported dtype; choose from uint8,uint16,float16")
     np_dtype = dtype_map[dtype]
     tile_size = tiling if tiling and tiling > 1 else 1
+    if matrix_mode and tile_size <= 1:
+        warnings.warn(
+            "matrix_mode requested but tiling <= 1; matrix low-rank mode disabled."
+        )
+        matrix_mode = False
+    if matrix_mode and container_version == 1:
+        warnings.warn(
+            "matrix_mode is only available in container version 2; disabling matrix mode."
+        )
+        matrix_mode = False
+    if scene_cut == "auto" and container_version == 1:
+        warnings.warn(
+            "scene_cut auto requires container version 2 segmentation; disabling scene cuts."
+        )
+        scene_cut = "off"
 
     reader = imageio.get_reader(input_path)
     frames_iter = iter(reader)
@@ -184,6 +236,7 @@ def encode_video_to_tfc(
     H, W, _ = first_rgb.shape
     tile_idx_map, tiles_y, tiles_x = _tile_indices(H, W, tile_size)
     num_tiles = tiles_y * tiles_x
+    tile_pixel_counts = np.bincount(tile_idx_map, minlength=num_tiles).astype(np.int64)
 
     def new_segment_accumulators():
         return (
@@ -259,6 +312,7 @@ def encode_video_to_tfc(
                     seg_stat["sum_s"][plane],
                     seg_stat["sum_ts"][plane],
                     seg_stat["sum_s2"][plane],
+                    tile_pixel_counts,
                     seg_len,
                     tau,
                     slope_threshold,
@@ -285,6 +339,7 @@ def encode_video_to_tfc(
                     "length": seg_len,
                     "modes": modes,
                     "tfc_params": tfc_params,
+                    "matrix_params": [],
                     "fb_params": {},
                     "fb_mask": fb_mask_pix,
                     "counts": (
@@ -379,6 +434,61 @@ def encode_video_to_tfc(
                 if tmpfiles[plane][seg_idx]:
                     Path(tmpfiles[plane][seg_idx]).unlink(missing_ok=True)
 
+    # Optional low-rank matrix mode for RAW-heavy tiles (v2 only).
+    if matrix_mode and container_version == 2:
+        tile_to_pixels: dict[int, np.ndarray] = {
+            tile_id: np.nonzero(tile_idx_map == tile_id)[0]
+            for tile_id in range(num_tiles)
+        }
+        matrix_tiles_used = 0
+        for plane in (PLANE_R, PLANE_G, PLANE_B):
+            for seg_idx in range(len(seg_lengths)):
+                seg = plane_segments[plane][seg_idx]
+                modes = seg["modes"]
+                fb_params = seg["fb_params"]
+                if not fb_params:
+                    continue
+                raw_tile_ids = np.unique(tile_idx_map[modes == MODE_FB_RAW])
+                for tile_id in raw_tile_ids.tolist():
+                    pix = tile_to_pixels[int(tile_id)]
+                    if pix.size <= 1:
+                        continue
+                    # Only transform full-RAW tiles to avoid overlap complexity.
+                    if np.any(modes[pix] != MODE_FB_RAW):
+                        continue
+                    if not all(int(p) in fb_params for p in pix):
+                        continue
+
+                    x = np.stack([fb_params[int(p)] for p in pix], axis=1).astype(
+                        np.float32
+                    )
+                    mean, temporal, spatial, recon = _fit_rank1_matrix(x)
+                    d_tfc = float(np.mean((x - recon) ** 2))
+                    d_sig = float(np.mean(x**2) + 1e-8)
+                    r = d_tfc / d_sig
+                    raw_bytes = int(x.size + 4 * pix.size)
+                    matrix_bytes = int(16 + 2 * x.shape[0] + 6 * pix.size)
+                    if r > matrix_tau or matrix_bytes >= int(
+                        raw_bytes * matrix_rate_ratio
+                    ):
+                        continue
+
+                    for p in pix:
+                        fb_params.pop(int(p), None)
+                    modes[pix] = MODE_TFC_MATRIX
+                    seg["matrix_params"].append(
+                        {
+                            "mode": MODE_TFC_MATRIX,
+                            "pixel_indices": pix.astype(np.int64),
+                            "mean": mean,
+                            "temporal": temporal,
+                            "spatial": spatial.astype(np.float32, copy=False),
+                        }
+                    )
+                    matrix_tiles_used += 1
+        if matrix_tiles_used:
+            print(f"Low-rank MATRIX tiles enabled: {matrix_tiles_used}")
+
     meta = get_build_meta()
     header = {
         "version": container_version,
@@ -414,6 +524,7 @@ def encode_video_to_tfc(
                         "length": seg_lengths[idx],
                         "modes": plane_segments[plane][idx]["modes"],
                         "tfc_params": plane_segments[plane][idx]["tfc_params"],
+                        "matrix_params": plane_segments[plane][idx]["matrix_params"],
                         "fb_params": plane_segments[plane][idx]["fb_params"],
                     }
                     for idx in range(len(seg_lengths))

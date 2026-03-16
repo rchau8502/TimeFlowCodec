@@ -75,6 +75,23 @@ def compress_main(argv: list[str] | None = None) -> None:
         default=0.35,
         help="Scene cut threshold (used when --scene-cut auto)",
     )
+    parser.add_argument(
+        "--matrix-mode",
+        action="store_true",
+        help="Enable low-rank matrix mode for RAW-heavy tiles (v2 + tiling)",
+    )
+    parser.add_argument(
+        "--matrix-tau",
+        type=float,
+        default=0.12,
+        help="Error ratio threshold for matrix mode acceptance",
+    )
+    parser.add_argument(
+        "--matrix-rate-ratio",
+        type=float,
+        default=0.95,
+        help="Require estimated matrix payload to be < raw * ratio",
+    )
     args = parser.parse_args(argv)
 
     encode_video_to_tfc(
@@ -91,6 +108,9 @@ def compress_main(argv: list[str] | None = None) -> None:
         macbook_profile=args.macbook_profile,
         scene_cut=args.scene_cut,
         scene_threshold=args.scene_threshold,
+        matrix_mode=args.matrix_mode,
+        matrix_tau=args.matrix_tau,
+        matrix_rate_ratio=args.matrix_rate_ratio,
     )
 
 
@@ -171,6 +191,23 @@ def main(argv: list[str] | None = None) -> None:
         default=0.35,
         help="Scene cut threshold (used when --scene-cut auto)",
     )
+    p_enc.add_argument(
+        "--matrix-mode",
+        action="store_true",
+        help="Enable low-rank matrix mode for RAW-heavy tiles (v2 + tiling)",
+    )
+    p_enc.add_argument(
+        "--matrix-tau",
+        type=float,
+        default=0.12,
+        help="Error ratio threshold for matrix mode acceptance",
+    )
+    p_enc.add_argument(
+        "--matrix-rate-ratio",
+        type=float,
+        default=0.95,
+        help="Require estimated matrix payload to be < raw * ratio",
+    )
 
     p_dec = sub.add_parser("decompress", help="Decompress .tfc to video")
     p_dec.add_argument("input")
@@ -211,6 +248,9 @@ def main(argv: list[str] | None = None) -> None:
             macbook_profile=args.macbook_profile,
             scene_cut=args.scene_cut,
             scene_threshold=args.scene_threshold,
+            matrix_mode=args.matrix_mode,
+            matrix_tau=args.matrix_tau,
+            matrix_rate_ratio=args.matrix_rate_ratio,
         )
     elif args.cmd == "decompress":
         decode_tfc_to_video(

@@ -14,6 +14,7 @@ from .constants import (
     MODE_FB_RAW,
     MODE_TFC_CONST,
     MODE_TFC_LINEAR,
+    MODE_TFC_MATRIX,
     PLANE_B,
     PLANE_G,
     PLANE_R,
@@ -200,11 +201,13 @@ def decode_tfc_to_video(
                     modes = seg["modes"]
                     tfc_params = seg["tfc_params"]
                     fb_params = seg["fb_params"]
+                    matrix_params = seg.get("matrix_params", [])
                     a_p, b_p, fb_idx, fb_arr = _prepare_plane_arrays(
                         seg_len, N, modes, tfc_params, fb_params
                     )
                     const_mask = modes == MODE_TFC_CONST
                     lin_mask = modes == MODE_TFC_LINEAR
+                    matrix_mask = modes == MODE_TFC_MATRIX
                     fb_mask = modes == MODE_FB_RAW
                     t_range = np.arange(seg_len, dtype=np.float32)
                     vals = np.zeros((seg_len, N), dtype=np.float32)
@@ -220,6 +223,17 @@ def decode_tfc_to_video(
                         fb_pix = np.nonzero(fb_mask)[0]
                         for pix in fb_pix:
                             vals[:, pix] = fb_arr[fb_map[int(pix)]]
+                    if np.any(matrix_mask) and matrix_params:
+                        for m in matrix_params:
+                            pix = np.asarray(m["pixel_indices"], dtype=np.int64)
+                            temporal = np.asarray(
+                                m["temporal"], dtype=np.float32
+                            ).reshape(seg_len)
+                            spatial = np.asarray(
+                                m["spatial"], dtype=np.float32
+                            ).reshape(pix.size)
+                            mean = float(m.get("mean", 0.0))
+                            vals[:, pix] = mean + np.outer(temporal, spatial)
                     flat[:, :, plane] = np.clip(np.rint(vals), 0, 255).astype(np.uint8)
                 for frame in frames:
                     writer.append_data(frame)
@@ -235,11 +249,13 @@ def decode_tfc_to_video(
                     modes = seg["modes"]
                     tfc_params = seg["tfc_params"]
                     fb_params = seg["fb_params"]
+                    matrix_params = seg.get("matrix_params", [])
                     a_p, b_p, fb_idx, fb_arr = _prepare_plane_arrays(
                         seg_len, N, modes, tfc_params, fb_params
                     )
                     const_mask = modes == MODE_TFC_CONST
                     lin_mask = modes == MODE_TFC_LINEAR
+                    matrix_mask = modes == MODE_TFC_MATRIX
                     fb_mask = modes == MODE_FB_RAW
                     t_range = np.arange(seg_len, dtype=np.float32)
                     vals = np.zeros((seg_len, N), dtype=np.float32)
@@ -255,6 +271,17 @@ def decode_tfc_to_video(
                         fb_pix = np.nonzero(fb_mask)[0]
                         for pix in fb_pix:
                             vals[:, pix] = fb_arr[fb_map[int(pix)]]
+                    if np.any(matrix_mask) and matrix_params:
+                        for m in matrix_params:
+                            pix = np.asarray(m["pixel_indices"], dtype=np.int64)
+                            temporal = np.asarray(
+                                m["temporal"], dtype=np.float32
+                            ).reshape(seg_len)
+                            spatial = np.asarray(
+                                m["spatial"], dtype=np.float32
+                            ).reshape(pix.size)
+                            mean = float(m.get("mean", 0.0))
+                            vals[:, pix] = mean + np.outer(temporal, spatial)
                     flat[:, :, plane] = np.clip(np.rint(vals), 0, 255).astype(np.uint8)
                 all_frames.append(frames)
             frames_out = np.concatenate(all_frames, axis=0)

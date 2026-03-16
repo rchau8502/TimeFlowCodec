@@ -101,6 +101,8 @@ class MainWindow(QMainWindow):
         self.comp_combo.setCurrentIndex(1)
         self.macbook_profile_checkbox = QCheckBox("MacBook optimized profile")
         self.macbook_profile_checkbox.setChecked(True)
+        self.matrix_mode_checkbox = QCheckBox("Enable matrix low-rank mode")
+        self.matrix_mode_checkbox.setChecked(True)
         self.scene_cut_combo = QComboBox()
         self.scene_cut_combo.addItems(["off", "auto"])
         self.scene_cut_combo.setCurrentText("auto")
@@ -127,10 +129,11 @@ class MainWindow(QMainWindow):
         grid.addWidget(QLabel("Payload compression"), 4, 0)
         grid.addWidget(self.comp_combo, 4, 1)
         grid.addWidget(self.macbook_profile_checkbox, 5, 1)
-        grid.addWidget(QLabel("Scene cut"), 6, 0)
-        grid.addWidget(self.scene_cut_combo, 6, 1)
-        grid.addWidget(QLabel("Scene threshold"), 7, 0)
-        grid.addWidget(self.scene_threshold_spin, 7, 1)
+        grid.addWidget(self.matrix_mode_checkbox, 6, 1)
+        grid.addWidget(QLabel("Scene cut"), 7, 0)
+        grid.addWidget(self.scene_cut_combo, 7, 1)
+        grid.addWidget(QLabel("Scene threshold"), 8, 0)
+        grid.addWidget(self.scene_threshold_spin, 8, 1)
 
         layout.addLayout(grid)
 
@@ -171,6 +174,7 @@ class MainWindow(QMainWindow):
             macbook_profile=self.macbook_profile_checkbox.isChecked(),
             scene_cut=self.scene_cut_combo.currentText(),
             scene_threshold=self.scene_threshold_spin.value(),
+            matrix_mode=self.matrix_mode_checkbox.isChecked(),
         )
         self.encode_worker.progress.connect(self.compress_progress.setValue)
         self.encode_worker.finished_success.connect(self._on_compress_done)

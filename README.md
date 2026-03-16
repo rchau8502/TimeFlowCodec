@@ -85,6 +85,16 @@ Install (editable or wheel), then use short commands:
 - Decompress: `timeflowdecompress out.tfc recon.mp4 --fps 30`
 - Subcommands via dispatcher: `timeflowcodec compress ...` or `timeflowcodec decompress ...`
 - Scene segmentation controls: `--scene-cut {off,auto}` and `--scene-threshold 0.35`
+- Matrix low-rank mode (helps RAW-heavy tiles): `--matrix-mode --matrix-tau 0.12 --matrix-rate-ratio 0.95`
+
+Example high-efficiency run:
+```bash
+timeflowcompress input.mp4 out.tfc \
+  --container-version 2 \
+  --tiling 16 \
+  --scene-cut auto \
+  --matrix-mode
+```
 
 ## GUI
 ```bash
