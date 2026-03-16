@@ -149,6 +149,14 @@ def encode_video_to_tfc(
     Streaming RGB encoder with bounded memory and optional scene-cut segmentation.
     """
 
+    if window is not None:
+        warnings.warn(
+            "window is currently accepted for API compatibility but not used by the encoder."
+        )
+
+    if scene_cut not in {"off", "auto"}:
+        raise ValueError("scene_cut must be 'off' or 'auto'")
+
     if macbook_profile:
         payload_comp_type, tiling, max_ram_mb, dtype, scene_cut = (
             _apply_macbook_profile_defaults(

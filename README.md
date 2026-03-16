@@ -73,11 +73,18 @@ timeflowcompress input.mp4 out.tfc --macbook-profile
 ```
 This applies safer defaults (`tiling=16`, `max_ram_mb=1536`, `zlib`, `scene_cut=auto`) and avoids heavy settings that cause lag on Apple Silicon laptops.
 
+Decode with progressive write (default in CLI):
+```bash
+timeflowdecompress out.tfc recon.mp4 --stream-output
+```
+Use `--no-stream-output` only for debugging/small clips.
+
 ## CLI Usage
 Install (editable or wheel), then use short commands:
 - Compress: `timeflowcompress input.mp4 out.tfc --tau 0.1 --slope-threshold 1e-3 --payload-comp-type 1`
 - Decompress: `timeflowdecompress out.tfc recon.mp4 --fps 30`
 - Subcommands via dispatcher: `timeflowcodec compress ...` or `timeflowcodec decompress ...`
+- Scene segmentation controls: `--scene-cut {off,auto}` and `--scene-threshold 0.35`
 
 ## GUI
 ```bash

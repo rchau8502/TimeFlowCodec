@@ -44,7 +44,7 @@ def test_encode_decode_roundtrip(monkeypatch, tmp_path):
     recon_video = tmp_path / "recon.mp4"
 
     encode_video_to_tfc(str(input_path), str(output_tfc))
-    decode_tfc_to_video(str(output_tfc), str(recon_video))
+    decode_tfc_to_video(str(output_tfc), str(recon_video), stream_output=False)
 
     assert "frames" in captured
     recon = captured["frames"]
@@ -53,6 +53,12 @@ def test_encode_decode_roundtrip(monkeypatch, tmp_path):
     assert overall_mse < 1e-2
 
     # Check constant red block
-    assert mse(frames[:, 0, 0, 0].astype(np.float32), recon[:, 0, 0, 0].astype(np.float32)) < 1e-6
+    assert (
+        mse(frames[:, 0, 0, 0].astype(np.float32), recon[:, 0, 0, 0].astype(np.float32))
+        < 1e-6
+    )
     # Check linear green block
-    assert mse(frames[:, 2, 2, 1].astype(np.float32), recon[:, 2, 2, 1].astype(np.float32)) < 1e-3
+    assert (
+        mse(frames[:, 2, 2, 1].astype(np.float32), recon[:, 2, 2, 1].astype(np.float32))
+        < 1e-3
+    )

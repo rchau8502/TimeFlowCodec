@@ -189,39 +189,75 @@ def decode_tfc_to_video(
             save_video_from_rgb(frames, output_path, fps=fps)
     else:
         # v2 segmented payload
-        all_frames: list[np.ndarray] = []
-        for seg_idx in range(len(plane_data[PLANE_R])):
-            seg_len = plane_data[PLANE_R][seg_idx]["length"]
-            frames = np.zeros((seg_len, H, W, 3), dtype=np.uint8)
-            flat = frames.reshape(seg_len, N, 3)
-            for plane in (PLANE_R, PLANE_G, PLANE_B):
-                seg = plane_data[plane][seg_idx]
-                modes = seg["modes"]
-                tfc_params = seg["tfc_params"]
-                fb_params = seg["fb_params"]
-                a_p, b_p, fb_idx, fb_arr = _prepare_plane_arrays(
-                    seg_len, N, modes, tfc_params, fb_params
-                )
-                const_mask = modes == MODE_TFC_CONST
-                lin_mask = modes == MODE_TFC_LINEAR
-                fb_mask = modes == MODE_FB_RAW
-                t_range = np.arange(seg_len, dtype=np.float32)
-                vals = np.zeros((seg_len, N), dtype=np.float32)
-                if np.any(const_mask):
-                    vals[:, const_mask] = a_p[const_mask]
-                if np.any(lin_mask):
-                    vals[:, lin_mask] = (
-                        a_p[lin_mask][None, :]
-                        + b_p[lin_mask][None, :] * t_range[:, None]
+        if stream_output:
+            writer = imageio.get_writer(output_path, fps=fps)
+            for seg_idx in range(len(plane_data[PLANE_R])):
+                seg_len = plane_data[PLANE_R][seg_idx]["length"]
+                frames = np.zeros((seg_len, H, W, 3), dtype=np.uint8)
+                flat = frames.reshape(seg_len, N, 3)
+                for plane in (PLANE_R, PLANE_G, PLANE_B):
+                    seg = plane_data[plane][seg_idx]
+                    modes = seg["modes"]
+                    tfc_params = seg["tfc_params"]
+                    fb_params = seg["fb_params"]
+                    a_p, b_p, fb_idx, fb_arr = _prepare_plane_arrays(
+                        seg_len, N, modes, tfc_params, fb_params
                     )
-                if np.any(fb_mask) and fb_idx is not None and fb_arr is not None:
-                    fb_map = {pix: row for row, pix in enumerate(fb_idx)}
-                    fb_pix = np.nonzero(fb_mask)[0]
-                    for pix in fb_pix:
-                        vals[:, pix] = fb_arr[fb_map[int(pix)]]
-                flat[:, :, plane] = np.clip(np.rint(vals), 0, 255).astype(np.uint8)
-            all_frames.append(frames)
-        frames_out = np.concatenate(all_frames, axis=0)
-        save_video_from_rgb(frames_out, output_path, fps=fps)
+                    const_mask = modes == MODE_TFC_CONST
+                    lin_mask = modes == MODE_TFC_LINEAR
+                    fb_mask = modes == MODE_FB_RAW
+                    t_range = np.arange(seg_len, dtype=np.float32)
+                    vals = np.zeros((seg_len, N), dtype=np.float32)
+                    if np.any(const_mask):
+                        vals[:, const_mask] = a_p[const_mask]
+                    if np.any(lin_mask):
+                        vals[:, lin_mask] = (
+                            a_p[lin_mask][None, :]
+                            + b_p[lin_mask][None, :] * t_range[:, None]
+                        )
+                    if np.any(fb_mask) and fb_idx is not None and fb_arr is not None:
+                        fb_map = {pix: row for row, pix in enumerate(fb_idx)}
+                        fb_pix = np.nonzero(fb_mask)[0]
+                        for pix in fb_pix:
+                            vals[:, pix] = fb_arr[fb_map[int(pix)]]
+                    flat[:, :, plane] = np.clip(np.rint(vals), 0, 255).astype(np.uint8)
+                for frame in frames:
+                    writer.append_data(frame)
+            writer.close()
+        else:
+            all_frames: list[np.ndarray] = []
+            for seg_idx in range(len(plane_data[PLANE_R])):
+                seg_len = plane_data[PLANE_R][seg_idx]["length"]
+                frames = np.zeros((seg_len, H, W, 3), dtype=np.uint8)
+                flat = frames.reshape(seg_len, N, 3)
+                for plane in (PLANE_R, PLANE_G, PLANE_B):
+                    seg = plane_data[plane][seg_idx]
+                    modes = seg["modes"]
+                    tfc_params = seg["tfc_params"]
+                    fb_params = seg["fb_params"]
+                    a_p, b_p, fb_idx, fb_arr = _prepare_plane_arrays(
+                        seg_len, N, modes, tfc_params, fb_params
+                    )
+                    const_mask = modes == MODE_TFC_CONST
+                    lin_mask = modes == MODE_TFC_LINEAR
+                    fb_mask = modes == MODE_FB_RAW
+                    t_range = np.arange(seg_len, dtype=np.float32)
+                    vals = np.zeros((seg_len, N), dtype=np.float32)
+                    if np.any(const_mask):
+                        vals[:, const_mask] = a_p[const_mask]
+                    if np.any(lin_mask):
+                        vals[:, lin_mask] = (
+                            a_p[lin_mask][None, :]
+                            + b_p[lin_mask][None, :] * t_range[:, None]
+                        )
+                    if np.any(fb_mask) and fb_idx is not None and fb_arr is not None:
+                        fb_map = {pix: row for row, pix in enumerate(fb_idx)}
+                        fb_pix = np.nonzero(fb_mask)[0]
+                        for pix in fb_pix:
+                            vals[:, pix] = fb_arr[fb_map[int(pix)]]
+                    flat[:, :, plane] = np.clip(np.rint(vals), 0, 255).astype(np.uint8)
+                all_frames.append(frames)
+            frames_out = np.concatenate(all_frames, axis=0)
+            save_video_from_rgb(frames_out, output_path, fps=fps)
 
     print(f"Decoded {input_path} -> {output_path}. Frames={T}, Size={H}x{W}")

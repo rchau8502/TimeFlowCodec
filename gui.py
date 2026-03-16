@@ -101,6 +101,14 @@ class MainWindow(QMainWindow):
         self.comp_combo.setCurrentIndex(1)
         self.macbook_profile_checkbox = QCheckBox("MacBook optimized profile")
         self.macbook_profile_checkbox.setChecked(True)
+        self.scene_cut_combo = QComboBox()
+        self.scene_cut_combo.addItems(["off", "auto"])
+        self.scene_cut_combo.setCurrentText("auto")
+        self.scene_threshold_spin = QDoubleSpinBox()
+        self.scene_threshold_spin.setDecimals(3)
+        self.scene_threshold_spin.setRange(0.01, 2.0)
+        self.scene_threshold_spin.setValue(0.35)
+        self.scene_threshold_spin.setSingleStep(0.05)
 
         grid.addWidget(QLabel("Input video"), 0, 0)
         grid.addWidget(self.in_video_edit, 0, 1)
@@ -119,6 +127,10 @@ class MainWindow(QMainWindow):
         grid.addWidget(QLabel("Payload compression"), 4, 0)
         grid.addWidget(self.comp_combo, 4, 1)
         grid.addWidget(self.macbook_profile_checkbox, 5, 1)
+        grid.addWidget(QLabel("Scene cut"), 6, 0)
+        grid.addWidget(self.scene_cut_combo, 6, 1)
+        grid.addWidget(QLabel("Scene threshold"), 7, 0)
+        grid.addWidget(self.scene_threshold_spin, 7, 1)
 
         layout.addLayout(grid)
 
@@ -157,6 +169,8 @@ class MainWindow(QMainWindow):
             container_version=2,
             dtype="uint8",
             macbook_profile=self.macbook_profile_checkbox.isChecked(),
+            scene_cut=self.scene_cut_combo.currentText(),
+            scene_threshold=self.scene_threshold_spin.value(),
         )
         self.encode_worker.progress.connect(self.compress_progress.setValue)
         self.encode_worker.finished_success.connect(self._on_compress_done)
@@ -240,6 +254,7 @@ class MainWindow(QMainWindow):
             input_path,
             output_path,
             self.fps_spin.value(),
+            True,
         )
         self.decode_worker.progress.connect(self.decompress_progress.setValue)
         self.decode_worker.finished_success.connect(self._on_decompress_done)

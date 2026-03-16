@@ -62,6 +62,19 @@ def compress_main(argv: list[str] | None = None) -> None:
         action="store_true",
         help="Apply MacBook-friendly defaults (tiling/max-ram/zlib/scene-cut)",
     )
+    parser.add_argument(
+        "--scene-cut",
+        type=str,
+        default="off",
+        choices=["off", "auto"],
+        help="Scene cut mode for segmented encoding",
+    )
+    parser.add_argument(
+        "--scene-threshold",
+        type=float,
+        default=0.35,
+        help="Scene cut threshold (used when --scene-cut auto)",
+    )
     args = parser.parse_args(argv)
 
     encode_video_to_tfc(
@@ -76,6 +89,8 @@ def compress_main(argv: list[str] | None = None) -> None:
         max_ram_mb=args.max_ram_mb,
         dtype=args.dtype,
         macbook_profile=args.macbook_profile,
+        scene_cut=args.scene_cut,
+        scene_threshold=args.scene_threshold,
     )
 
 
@@ -86,9 +101,23 @@ def decompress_main(argv: list[str] | None = None) -> None:
     parser.add_argument("input", help="Input .tfc path")
     parser.add_argument("output", help="Output video path")
     parser.add_argument("--fps", type=int, default=30, help="Output frames per second")
+    parser.add_argument(
+        "--stream-output",
+        action="store_true",
+        default=True,
+        help="Write decoded frames progressively to keep memory bounded",
+    )
+    parser.add_argument(
+        "--no-stream-output",
+        action="store_false",
+        dest="stream_output",
+        help="Disable streaming decode and buffer full output in memory",
+    )
     args = parser.parse_args(argv)
 
-    decode_tfc_to_video(args.input, args.output, fps=args.fps)
+    decode_tfc_to_video(
+        args.input, args.output, fps=args.fps, stream_output=args.stream_output
+    )
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -129,11 +158,36 @@ def main(argv: list[str] | None = None) -> None:
         action="store_true",
         help="Apply MacBook-friendly defaults (tiling/max-ram/zlib/scene-cut)",
     )
+    p_enc.add_argument(
+        "--scene-cut",
+        type=str,
+        default="off",
+        choices=["off", "auto"],
+        help="Scene cut mode for segmented encoding",
+    )
+    p_enc.add_argument(
+        "--scene-threshold",
+        type=float,
+        default=0.35,
+        help="Scene cut threshold (used when --scene-cut auto)",
+    )
 
     p_dec = sub.add_parser("decompress", help="Decompress .tfc to video")
     p_dec.add_argument("input")
     p_dec.add_argument("output")
     p_dec.add_argument("--fps", type=int, default=30)
+    p_dec.add_argument(
+        "--stream-output",
+        action="store_true",
+        default=True,
+        help="Write decoded frames progressively to keep memory bounded",
+    )
+    p_dec.add_argument(
+        "--no-stream-output",
+        action="store_false",
+        dest="stream_output",
+        help="Disable streaming decode and buffer full output in memory",
+    )
 
     args = parser.parse_args(argv)
 
@@ -155,9 +209,13 @@ def main(argv: list[str] | None = None) -> None:
             max_ram_mb=args.max_ram_mb,
             dtype=args.dtype,
             macbook_profile=args.macbook_profile,
+            scene_cut=args.scene_cut,
+            scene_threshold=args.scene_threshold,
         )
     elif args.cmd == "decompress":
-        decode_tfc_to_video(args.input, args.output, fps=args.fps)
+        decode_tfc_to_video(
+            args.input, args.output, fps=args.fps, stream_output=args.stream_output
+        )
     else:
         parser.error("Specify 'compress' or 'decompress' (or use --version)")
 
