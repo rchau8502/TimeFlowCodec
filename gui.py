@@ -16,8 +16,8 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMainWindow,
-    QPushButton,
     QProgressBar,
+    QPushButton,
     QSpinBox,
     QTabWidget,
     QVBoxLayout,
@@ -97,8 +97,11 @@ class MainWindow(QMainWindow):
         self.slope_spin.setSingleStep(1e-3)
 
         self.comp_combo = QComboBox()
-        self.comp_combo.addItems(["None", "zlib", "LZMA"])
-        self.comp_combo.setCurrentIndex(1)
+        self.comp_combo.addItems(["None", "zlib", "LZMA", "zstd"])
+        self.comp_combo.setCurrentIndex(3)
+        self.preset_combo = QComboBox()
+        self.preset_combo.addItems(["anime", "lownoise", "custom"])
+        self.preset_combo.setCurrentText("anime")
         self.macbook_profile_checkbox = QCheckBox("MacBook optimized profile")
         self.macbook_profile_checkbox.setChecked(True)
         self.matrix_mode_checkbox = QCheckBox("Enable matrix low-rank mode")
@@ -128,12 +131,14 @@ class MainWindow(QMainWindow):
 
         grid.addWidget(QLabel("Payload compression"), 4, 0)
         grid.addWidget(self.comp_combo, 4, 1)
-        grid.addWidget(self.macbook_profile_checkbox, 5, 1)
-        grid.addWidget(self.matrix_mode_checkbox, 6, 1)
-        grid.addWidget(QLabel("Scene cut"), 7, 0)
-        grid.addWidget(self.scene_cut_combo, 7, 1)
-        grid.addWidget(QLabel("Scene threshold"), 8, 0)
-        grid.addWidget(self.scene_threshold_spin, 8, 1)
+        grid.addWidget(QLabel("Preset"), 5, 0)
+        grid.addWidget(self.preset_combo, 5, 1)
+        grid.addWidget(self.macbook_profile_checkbox, 6, 1)
+        grid.addWidget(self.matrix_mode_checkbox, 7, 1)
+        grid.addWidget(QLabel("Scene cut"), 8, 0)
+        grid.addWidget(self.scene_cut_combo, 8, 1)
+        grid.addWidget(QLabel("Scene threshold"), 9, 0)
+        grid.addWidget(self.scene_threshold_spin, 9, 1)
 
         layout.addLayout(grid)
 
@@ -175,6 +180,7 @@ class MainWindow(QMainWindow):
             scene_cut=self.scene_cut_combo.currentText(),
             scene_threshold=self.scene_threshold_spin.value(),
             matrix_mode=self.matrix_mode_checkbox.isChecked(),
+            preset=self.preset_combo.currentText(),
         )
         self.encode_worker.progress.connect(self.compress_progress.setValue)
         self.encode_worker.finished_success.connect(self._on_compress_done)

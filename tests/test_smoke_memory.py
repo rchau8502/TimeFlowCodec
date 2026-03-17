@@ -1,15 +1,12 @@
 from __future__ import annotations
 
-import os
 import shutil
 import subprocess
-import sys
-from pathlib import Path
 
 import pytest
 
-from timeflowcodec.encoder import encode_video_to_tfc
 from timeflowcodec.decoder import decode_tfc_to_video
+from timeflowcodec.encoder import encode_video_to_tfc
 
 
 @pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg required")

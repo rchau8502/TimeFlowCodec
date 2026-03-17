@@ -4,7 +4,14 @@ from __future__ import annotations
 
 import argparse
 
-from . import DEFAULT_SLOPE_THRESHOLD, DEFAULT_TAU
+from . import (
+    COMP_LZMA,
+    COMP_NONE,
+    COMP_ZLIB,
+    COMP_ZSTD,
+    DEFAULT_SLOPE_THRESHOLD,
+    DEFAULT_TAU,
+)
 from .decoder import decode_tfc_to_video
 from .encoder import encode_video_to_tfc
 from .version import get_version_string
@@ -28,9 +35,16 @@ def compress_main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--payload-comp-type",
         type=int,
-        default=1,
-        choices=[0, 1, 2],
-        help="Payload compression: 0=none, 1=zlib, 2=LZMA",
+        default=COMP_ZSTD,
+        choices=[COMP_NONE, COMP_ZLIB, COMP_LZMA, COMP_ZSTD],
+        help="Payload compression: 0=none, 1=zlib, 2=LZMA, 3=zstd",
+    )
+    parser.add_argument(
+        "--preset",
+        type=str,
+        default="anime",
+        choices=["custom", "anime", "lownoise"],
+        help="Compression preset (anime/lownoise are optimized for coherent content)",
     )
     parser.add_argument(
         "--max-frames", type=int, default=None, help="Limit number of frames processed"
@@ -108,9 +122,10 @@ def compress_main(argv: list[str] | None = None) -> None:
         macbook_profile=args.macbook_profile,
         scene_cut=args.scene_cut,
         scene_threshold=args.scene_threshold,
-        matrix_mode=args.matrix_mode,
-        matrix_tau=args.matrix_tau,
-        matrix_rate_ratio=args.matrix_rate_ratio,
+            matrix_mode=args.matrix_mode,
+            matrix_tau=args.matrix_tau,
+            matrix_rate_ratio=args.matrix_rate_ratio,
+            preset=args.preset,
     )
 
 
@@ -147,12 +162,27 @@ def main(argv: list[str] | None = None) -> None:
     )
     sub = parser.add_subparsers(dest="cmd", required=False)
 
-    p_enc = sub.add_parser("compress", help="Compress video to .tfc")
+    p_enc = sub.add_parser(
+        "encode", aliases=["compress"], help="Compress video to .tfc"
+    )
     p_enc.add_argument("input")
     p_enc.add_argument("output")
     p_enc.add_argument("--tau", type=float, default=DEFAULT_TAU)
     p_enc.add_argument("--slope-threshold", type=float, default=DEFAULT_SLOPE_THRESHOLD)
-    p_enc.add_argument("--payload-comp-type", type=int, default=2, choices=[0, 1, 2])
+    p_enc.add_argument(
+        "--payload-comp-type",
+        type=int,
+        default=COMP_ZSTD,
+        choices=[COMP_NONE, COMP_ZLIB, COMP_LZMA, COMP_ZSTD],
+        help="Payload compression: 0=none, 1=zlib, 2=LZMA, 3=zstd",
+    )
+    p_enc.add_argument(
+        "--preset",
+        type=str,
+        default="anime",
+        choices=["custom", "anime", "lownoise"],
+        help="Compression preset",
+    )
     p_enc.add_argument(
         "--container-version",
         type=int,
@@ -209,7 +239,9 @@ def main(argv: list[str] | None = None) -> None:
         help="Require estimated matrix payload to be < raw * ratio",
     )
 
-    p_dec = sub.add_parser("decompress", help="Decompress .tfc to video")
+    p_dec = sub.add_parser(
+        "decode", aliases=["decompress"], help="Decompress .tfc to video"
+    )
     p_dec.add_argument("input")
     p_dec.add_argument("output")
     p_dec.add_argument("--fps", type=int, default=30)
@@ -232,7 +264,7 @@ def main(argv: list[str] | None = None) -> None:
         print(get_version_string())
         return
 
-    if args.cmd == "compress":
+    if args.cmd in {"encode", "compress"}:
         encode_video_to_tfc(
             args.input,
             args.output,
@@ -251,13 +283,14 @@ def main(argv: list[str] | None = None) -> None:
             matrix_mode=args.matrix_mode,
             matrix_tau=args.matrix_tau,
             matrix_rate_ratio=args.matrix_rate_ratio,
+            preset=args.preset,
         )
-    elif args.cmd == "decompress":
+    elif args.cmd in {"decode", "decompress"}:
         decode_tfc_to_video(
             args.input, args.output, fps=args.fps, stream_output=args.stream_output
         )
     else:
-        parser.error("Specify 'compress' or 'decompress' (or use --version)")
+        parser.error("Specify 'encode'/'decode' (or 'compress'/'decompress').")
 
 
 if __name__ == "__main__":

@@ -13,6 +13,8 @@ import numpy as np
 from .constants import (
     BITS_PER_MODE,
     COLOR_FORMAT_RGB,
+    COMP_ZLIB,
+    COMP_ZSTD,
     DEFAULT_SLOPE_THRESHOLD,
     DEFAULT_TAU,
     MODE_FB_RAW,
@@ -44,7 +46,7 @@ def _apply_macbook_profile_defaults(
     """Apply conservative defaults for Apple Silicon laptops."""
     if payload_comp_type == 2:
         # LZMA can be very slow and memory-heavy on laptop-class CPUs.
-        payload_comp_type = 1
+        payload_comp_type = COMP_ZLIB
     if tiling is None:
         tiling = 16
     if max_ram_mb is None:
@@ -54,6 +56,65 @@ def _apply_macbook_profile_defaults(
     if scene_cut == "off":
         scene_cut = "auto"
     return payload_comp_type, tiling, max_ram_mb, dtype, scene_cut
+
+
+def _apply_preset_defaults(
+    *,
+    preset: str | None,
+    tau: float,
+    slope_threshold: float,
+    payload_comp_type: int,
+    tiling: int | None,
+    max_ram_mb: int | None,
+    scene_cut: str,
+    scene_threshold: float,
+    matrix_mode: bool,
+    matrix_tau: float,
+    matrix_rate_ratio: float,
+) -> tuple[float, float, int, int | None, int | None, str, float, bool, float, float]:
+    if preset is None or preset == "custom":
+        return (
+            tau,
+            slope_threshold,
+            payload_comp_type,
+            tiling,
+            max_ram_mb,
+            scene_cut,
+            scene_threshold,
+            matrix_mode,
+            matrix_tau,
+            matrix_rate_ratio,
+        )
+
+    if preset == "anime":
+        return (
+            0.20 if tau == DEFAULT_TAU else tau,
+            0.003 if slope_threshold == DEFAULT_SLOPE_THRESHOLD else slope_threshold,
+            COMP_ZSTD if payload_comp_type == COMP_ZLIB else payload_comp_type,
+            16 if tiling is None else tiling,
+            2500 if max_ram_mb is None else max_ram_mb,
+            "auto" if scene_cut == "off" else scene_cut,
+            0.27 if scene_threshold == 0.35 else scene_threshold,
+            True if not matrix_mode else matrix_mode,
+            0.22 if matrix_tau == 0.12 else matrix_tau,
+            1.05 if matrix_rate_ratio == 0.95 else matrix_rate_ratio,
+        )
+
+    if preset == "lownoise":
+        return (
+            0.14 if tau == DEFAULT_TAU else tau,
+            0.0015 if slope_threshold == DEFAULT_SLOPE_THRESHOLD else slope_threshold,
+            COMP_ZSTD if payload_comp_type == COMP_ZLIB else payload_comp_type,
+            16 if tiling is None else tiling,
+            2500 if max_ram_mb is None else max_ram_mb,
+            "auto" if scene_cut == "off" else scene_cut,
+            0.32 if scene_threshold == 0.35 else scene_threshold,
+            True if not matrix_mode else matrix_mode,
+            0.14 if matrix_tau == 0.12 else matrix_tau,
+            1.00 if matrix_rate_ratio == 0.95 else matrix_rate_ratio,
+        )
+
+    raise ValueError("preset must be one of: custom, anime, lownoise")
 
 
 def _fit_rank1_matrix(
@@ -180,6 +241,7 @@ def encode_video_to_tfc(
     matrix_mode: bool = False,
     matrix_tau: float = 0.12,
     matrix_rate_ratio: float = 0.95,
+    preset: str | None = None,
 ) -> None:
     """
     Streaming RGB encoder with bounded memory and optional scene-cut segmentation.
@@ -534,5 +596,31 @@ def encode_video_to_tfc(
             f.write(payload)
 
     print(
-        f"Encoded {input_path} -> {output_path}. Frames={T}, Size={H}x{W}, Tiles={tiles_y}x{tiles_x}, Segments={len(seg_lengths)}"
+        "Encoded "
+        f"{input_path} -> {output_path}. Frames={T}, Size={H}x{W}, "
+        f"Tiles={tiles_y}x{tiles_x}, Segments={len(seg_lengths)}"
+    )
+    (
+        tau,
+        slope_threshold,
+        payload_comp_type,
+        tiling,
+        max_ram_mb,
+        scene_cut,
+        scene_threshold,
+        matrix_mode,
+        matrix_tau,
+        matrix_rate_ratio,
+    ) = _apply_preset_defaults(
+        preset=preset,
+        tau=tau,
+        slope_threshold=slope_threshold,
+        payload_comp_type=payload_comp_type,
+        tiling=tiling,
+        max_ram_mb=max_ram_mb,
+        scene_cut=scene_cut,
+        scene_threshold=scene_threshold,
+        matrix_mode=matrix_mode,
+        matrix_tau=matrix_tau,
+        matrix_rate_ratio=matrix_rate_ratio,
     )

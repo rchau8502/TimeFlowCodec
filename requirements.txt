@@ -1,5 +1,6 @@
 numpy
 imageio[ffmpeg]
+zstandard
 PySide6
 pyinstaller
 pytest

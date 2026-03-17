@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import io
+import lzma
 import struct
 import zlib
-import lzma
 from typing import Dict, Tuple
 
 import numpy as np
@@ -13,10 +13,19 @@ import numpy as np
 from .constants import (
     BITS_PER_MODE,
     COLOR_FORMAT_RGB,
+    COMP_LZMA,
+    COMP_NONE,
+    COMP_ZLIB,
+    COMP_ZSTD,
     MODE_TFC_CONST,
     MODE_TFC_LINEAR,
     MODE_TFC_MATRIX,
 )
+
+try:
+    import zstandard as zstd
+except ImportError:  # pragma: no cover - tested via runtime behavior
+    zstd = None
 
 MAGIC = b"TFC1"
 VERSION_V1 = 1
@@ -210,22 +219,34 @@ def read_header(f) -> dict:
 
 
 def _compress_payload(buf: bytes, comp_type: int) -> bytes:
-    if comp_type == 0:
+    if comp_type == COMP_NONE:
         return buf
-    if comp_type == 1:
+    if comp_type == COMP_ZLIB:
         return zlib.compress(buf)
-    if comp_type == 2:
+    if comp_type == COMP_LZMA:
         return lzma.compress(buf)
+    if comp_type == COMP_ZSTD:
+        if zstd is None:
+            raise ValueError(
+                "Compression type zstd requested but 'zstandard' is not installed."
+            )
+        return zstd.ZstdCompressor(level=10).compress(buf)
     raise ValueError(f"Unknown compression type {comp_type}")
 
 
 def _decompress_payload(buf: bytes, comp_type: int) -> bytes:
-    if comp_type == 0:
+    if comp_type == COMP_NONE:
         return buf
-    if comp_type == 1:
+    if comp_type == COMP_ZLIB:
         return zlib.decompress(buf)
-    if comp_type == 2:
+    if comp_type == COMP_LZMA:
         return lzma.decompress(buf)
+    if comp_type == COMP_ZSTD:
+        if zstd is None:
+            raise ValueError(
+                "Compression type zstd detected but 'zstandard' is not installed."
+            )
+        return zstd.ZstdDecompressor().decompress(buf)
     raise ValueError(f"Unknown compression type {comp_type}")
 
 

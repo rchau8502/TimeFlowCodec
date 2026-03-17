@@ -1,8 +1,8 @@
 """Utility helpers for RGB TimeFlowCodec."""
 from __future__ import annotations
 
-import numpy as np
 import imageio.v2 as imageio
+import numpy as np
 
 
 def _ensure_rgb(frame: np.ndarray) -> np.ndarray:

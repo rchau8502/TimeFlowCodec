@@ -4,7 +4,7 @@ import subprocess
 from pathlib import Path
 from typing import Dict
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 
 def _run_git(args: list[str]) -> str | None:

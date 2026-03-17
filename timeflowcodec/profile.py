@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import subprocess
 import sys
 import time
@@ -15,8 +14,8 @@ try:
 except ImportError:  # pragma: no cover
     psutil = None
 
-from .encoder import encode_video_to_tfc
 from .decoder import decode_tfc_to_video
+from .encoder import encode_video_to_tfc
 
 
 def current_rss_mb() -> float:

@@ -1,6 +1,6 @@
 # TimeFlowCodec — Per-Pixel Temporal Codec for UI/Animation
 
-Wedge: excels on **UI/animation/temporally coherent content** with per-channel temporal fits (CONST/LINEAR) and raw fallback. Transparent math, easy parallelism. Includes runnable codec (CLI/GUI), benchmark harness, and thesis.
+Wedge: excels on **UI/animation/temporally coherent content** with per-channel temporal fits (CONST/LINEAR), scene segmentation, tile sharing, and low-rank matrix fallback. Includes runnable codec (CLI/GUI), benchmark harness, and thesis.
 
 ## Scoreboard (regen with `make bench`)
 | codec | preset | crf | clip | size (bytes) | psnr | ssim |
@@ -26,17 +26,18 @@ For RGB video `V(t, y, x, c)` (channels `c ∈ {R,G,B}`):
 - `MODE_TFC_CONST` – store `a`
 - `MODE_TFC_LINEAR` – store `a, b`
 - `MODE_FB_RAW` – store raw uint8 per-frame samples
+- `MODE_TFC_MATRIX` – rank-1 low-rank factors for RAW-heavy tiles
 
 ### Container Layout (.tfc)
 ```
 [HEADER]
-[R MODE TABLE][R PAYLOAD]
-[G MODE TABLE][G PAYLOAD]
-[B MODE TABLE][B PAYLOAD]
+[R PAYLOAD]
+[G PAYLOAD]
+[B PAYLOAD]
 ```
-- Header: width/height/frames, color_format=RGB, bits_per_mode=2, payload_comp_type (none/zlib/lzma).
-- Mode tables: 2 bits per pixel per channel, row-major.
-- Payloads: params (float32) + raw sections (uint8), compressed per channel.
+- Header (v2 default): width/height/frames, tiling, segment count, color_format=RGB, bits_per_mode=2, payload_comp_type (none/zlib/lzma/zstd).
+- Per-plane payload stores segment streams (mode map RLE + quantized CONST/LINEAR + MATRIX + RAW).
+- Mode maps are bitpacked and RLE-coded. CONST/LINEAR payloads are quantized (no float32 arrays on disk in v2).
 
 ### Best For
 Temporal coherence (animation, UI captures, low-noise footage). No spatial blocking; all modeling is per pixel per channel.
@@ -56,13 +57,13 @@ From PyPI (once published):
 ```bash
 pip install timeflowcodec
 ```
-Dependencies include `imageio[ffmpeg]`, which bundles a static ffmpeg backend so video I/O works without extra manual installs. Default payload compression is zlib for speed; choose LZMA if you prefer maximum compression over runtime.
+Dependencies include `imageio[ffmpeg]` and `zstandard`. Default payload compression is zstd for strong ratio/speed.
 
 ## Quickstart (under 2 minutes)
 ```bash
 make install
-timeflowcompress input.mp4 out.tfc --tau 0.1 --slope-threshold 1e-3 --payload-comp-type 1
-timeflowdecompress out.tfc recon.mp4 --fps 30
+tfc encode input.mp4 out.tfc --preset anime
+tfc decode out.tfc recon.mp4 --fps 30
 ```
 GUI: `python gui.py`
 
@@ -71,7 +72,7 @@ Use the low-memory, laptop-friendly profile:
 ```bash
 timeflowcompress input.mp4 out.tfc --macbook-profile
 ```
-This applies safer defaults (`tiling=16`, `max_ram_mb=1536`, `zlib`, `scene_cut=auto`) and avoids heavy settings that cause lag on Apple Silicon laptops.
+This applies safer defaults (`tiling=16`, `max_ram_mb=1536`, `scene_cut=auto`) and avoids heavy settings that cause lag on Apple Silicon laptops.
 
 Decode with progressive write (default in CLI):
 ```bash
@@ -81,16 +82,18 @@ Use `--no-stream-output` only for debugging/small clips.
 
 ## CLI Usage
 Install (editable or wheel), then use short commands:
-- Compress: `timeflowcompress input.mp4 out.tfc --tau 0.1 --slope-threshold 1e-3 --payload-comp-type 1`
-- Decompress: `timeflowdecompress out.tfc recon.mp4 --fps 30`
-- Subcommands via dispatcher: `timeflowcodec compress ...` or `timeflowcodec decompress ...`
+- Compress: `tfc encode input.mp4 out.tfc --preset anime`
+- Decompress: `tfc decode out.tfc recon.mp4 --fps 30`
+- Alternative entrypoints: `timeflowcodec encode/decode`, `timeflowcompress`, `timeflowdecompress`
+- Presets: `--preset {anime,lownoise,custom}`
 - Scene segmentation controls: `--scene-cut {off,auto}` and `--scene-threshold 0.35`
 - Matrix low-rank mode (helps RAW-heavy tiles): `--matrix-mode --matrix-tau 0.12 --matrix-rate-ratio 0.95`
 
 Example high-efficiency run:
 ```bash
-timeflowcompress input.mp4 out.tfc \
+tfc encode input.mp4 out.tfc \
   --container-version 2 \
+  --preset anime \
   --tiling 16 \
   --scene-cut auto \
   --matrix-mode
@@ -100,12 +103,12 @@ timeflowcompress input.mp4 out.tfc \
 ```bash
 python gui.py
 ```
-Two tabs for compression/decompression; configure tau, slope threshold, and payload compression (None/zlib/LZMA).
+Two tabs for compression/decompression; configure preset, tau, slope threshold, and payload compression (None/zlib/LZMA/zstd).
 
 ## Reproduce benchmarks
 ```bash
 # Prepare clips (see clips/README.md)
-python -m timeflowcodec.bench --clips clips --out bench_out --codecs tfc,x264,x265,av1 --presets fast,medium --crf 18,23,28
+python -m timeflowcodec.bench --clips clips --out bench_out --codecs tfc,x264,x265,av1 --presets fast,medium --crf 18,23,28 --tfc-preset anime
 ```
 Outputs: `bench_out/results.json`, `bench_out/report.md`, `bench_out/plots/`.
 
@@ -142,5 +145,5 @@ This produces `dist/TimeFlowCodec.app` and `dist/TimeFlowCodec_macbook_installer
 
 ## Notes
 - Strictly RGB; no YUV420 conversion.
-- Payload compression: none (0), zlib (1), LZMA (2).
-- Mode tables are 2 bits; parameter payload uses float32; fallback is uint8 per frame.
+- Payload compression: none (0), zlib (1), LZMA (2), zstd (3).
+- Mode maps are 2-bit packed + RLE in v2; fallback payload is uint8 and matrix stream is quantized int16 factors.

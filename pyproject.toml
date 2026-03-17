@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "timeflowcodec"
-version = "0.1.0"
+version = "0.2.0"
 description = "Per-pixel RGB temporal function codec (CONST/LINEAR per channel with raw fallback)."
 readme = "README.md"
 authors = [{ name = "Applied Math Thesis" }]
@@ -13,12 +13,14 @@ requires-python = ">=3.9"
 dependencies = [
     "numpy",
     "imageio[ffmpeg]",
+    "zstandard",
 ]
 
 [project.scripts]
 timeflowcompress = "timeflowcodec.cli:compress_main"
 timeflowdecompress = "timeflowcodec.cli:decompress_main"
 timeflowcodec = "timeflowcodec.cli:main"
+tfc = "timeflowcodec.cli:main"
 
 [project.optional-dependencies]
 gui = ["PySide6"]
@@ -36,4 +38,6 @@ include-package-data = true
 [tool.ruff]
 line-length = 120
 target-version = "py311"
+
+[tool.ruff.lint]
 select = ["E", "F", "I"]

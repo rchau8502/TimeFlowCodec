@@ -3,21 +3,21 @@ from __future__ import annotations
 import argparse
 import json
 import math
-import os
 import subprocess
 import sys
 import tempfile
 import time
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Iterable, List, Optional
+from typing import List, Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
 
+from .constants import COMP_ZSTD
 from .decoder import decode_tfc_to_video
 from .encoder import encode_video_to_tfc
-from .utils import _ensure_rgb, load_video_rgb
+from .utils import load_video_rgb
 
 
 @dataclass
@@ -110,12 +110,26 @@ def load_frames(path: Path) -> np.ndarray:
     return arr[0]
 
 
-def bench_tfc(clip: Path, tmp: Path, tau: float, slope: float, payload_comp_type: int) -> tuple[Path, BenchResult]:
+def bench_tfc(
+    clip: Path,
+    tmp: Path,
+    tau: float,
+    slope: float,
+    payload_comp_type: int,
+    preset: str,
+) -> tuple[Path, BenchResult]:
     out_tfc = tmp / (clip.stem + ".tfc")
     out_rec = tmp / (clip.stem + "_tfc.mp4")
 
     start = time.perf_counter()
-    encode_video_to_tfc(str(clip), str(out_tfc), tau=tau, slope_threshold=slope, payload_comp_type=payload_comp_type)
+    encode_video_to_tfc(
+        str(clip),
+        str(out_tfc),
+        tau=tau,
+        slope_threshold=slope,
+        payload_comp_type=payload_comp_type,
+        preset=preset,
+    )
     enc_time = time.perf_counter() - start
 
     start = time.perf_counter()
@@ -135,7 +149,7 @@ def bench_tfc(clip: Path, tmp: Path, tau: float, slope: float, payload_comp_type
 
     res = BenchResult(
         codec="tfc",
-        preset="-",
+        preset=preset,
         crf="-",
         clip=clip.name,
         encode_time=enc_time,
@@ -256,7 +270,6 @@ def write_results(out_dir: Path, results: list[BenchResult], env: dict, missing:
                 for r in results:
                     if r.codec != codec:
                         continue
-                    t = r.encode_time
                     xs.append(r.size_bytes)
                     val = getattr(r, metric)
                     ys.append(val if val is not None else np.nan)
@@ -296,7 +309,20 @@ def main(argv: Optional[List[str]] = None) -> None:
     parser.add_argument("--crf", type=str, default="23", help="Comma separated CRF values")
     parser.add_argument("--tau", type=float, default=0.1, help="Tau for TFC")
     parser.add_argument("--slope-threshold", type=float, default=1e-3, help="Slope threshold for TFC")
-    parser.add_argument("--payload-comp-type", type=int, default=1, choices=[0, 1, 2], help="Payload compression for TFC")
+    parser.add_argument(
+        "--payload-comp-type",
+        type=int,
+        default=COMP_ZSTD,
+        choices=[0, 1, 2, 3],
+        help="Payload compression for TFC (0=none,1=zlib,2=lzma,3=zstd)",
+    )
+    parser.add_argument(
+        "--tfc-preset",
+        type=str,
+        default="anime",
+        choices=["custom", "anime", "lownoise"],
+        help="Preset for TFC runs",
+    )
     args = parser.parse_args(argv)
 
     clips = find_clips(args.clips)
@@ -313,7 +339,14 @@ def main(argv: Optional[List[str]] = None) -> None:
 
     for clip in clips:
         # TFC
-        rec_path, res = bench_tfc(clip, tmp, args.tau, args.slope_threshold, args.payload_comp_type)
+        _rec_path, res = bench_tfc(
+            clip,
+            tmp,
+            args.tau,
+            args.slope_threshold,
+            args.payload_comp_type,
+            args.tfc_preset,
+        )
         results.append(res)
         # ffmpeg baselines
         for codec in codecs:

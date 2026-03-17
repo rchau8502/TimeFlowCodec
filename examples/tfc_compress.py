@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 
-from timeflowcodec import encode_video_to_tfc
+from timeflowcodec import COMP_LZMA, COMP_NONE, COMP_ZLIB, COMP_ZSTD, encode_video_to_tfc
 
 
 def main():
@@ -23,9 +23,16 @@ def main():
     parser.add_argument(
         "--payload-comp-type",
         type=int,
-        default=1,
-        choices=[0, 1, 2],
-        help="Payload compression: 0=none, 1=zlib, 2=LZMA",
+        default=COMP_ZSTD,
+        choices=[COMP_NONE, COMP_ZLIB, COMP_LZMA, COMP_ZSTD],
+        help="Payload compression: 0=none, 1=zlib, 2=LZMA, 3=zstd",
+    )
+    parser.add_argument(
+        "--preset",
+        type=str,
+        default="anime",
+        choices=["custom", "anime", "lownoise"],
+        help="Compression preset",
     )
     parser.add_argument(
         "--max-frames", type=int, default=None, help="Limit number of frames processed"
@@ -101,6 +108,7 @@ def main():
         matrix_tau=args.matrix_tau,
         matrix_rate_ratio=args.matrix_rate_ratio,
         macbook_profile=args.macbook_profile,
+        preset=args.preset,
     )
 
 
