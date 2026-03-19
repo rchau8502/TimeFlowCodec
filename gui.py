@@ -57,6 +57,7 @@ def _preset_ui_defaults(preset: str) -> dict[str, float | int | bool | str]:
             "scene_threshold": 0.27,
             "matrix_mode": False,
             "compression_index": 3,
+            "colorspace_index": 2,
         }
     if preset == "lownoise":
         return {
@@ -66,6 +67,7 @@ def _preset_ui_defaults(preset: str) -> dict[str, float | int | bool | str]:
             "scene_threshold": 0.32,
             "matrix_mode": False,
             "compression_index": 3,
+            "colorspace_index": 1,
         }
     return {
         "tau": 0.10,
@@ -74,17 +76,22 @@ def _preset_ui_defaults(preset: str) -> dict[str, float | int | bool | str]:
         "scene_threshold": 0.35,
         "matrix_mode": False,
         "compression_index": 3,
+        "colorspace_index": 0,
     }
 
 
 def _compression_mode_label(
-    preset: str, macbook_profile: bool, matrix_mode: bool, compression_index: int
+    preset: str,
+    macbook_profile: bool,
+    matrix_mode: bool,
+    compression_index: int,
+    colorspace: str,
 ) -> str:
     compression_name = ["none", "zlib", "lzma", "zstd"][compression_index]
     platform_name = "Apple Silicon safe" if macbook_profile else "standard runtime"
     matrix_name = "matrix on" if matrix_mode else "matrix off"
     return (
-        f"{preset} preset, {compression_name}, {platform_name}, {matrix_name}. "
+        f"{preset} preset, {colorspace}, {compression_name}, {platform_name}, {matrix_name}. "
         "Optimized for bounded-memory desktop use."
     )
 
@@ -395,6 +402,11 @@ class MainWindow(QMainWindow):
         self.comp_combo.setCurrentIndex(3)
         self.comp_combo.currentIndexChanged.connect(self._update_compress_summary)
 
+        self.colorspace_combo = QComboBox()
+        self.colorspace_combo.addItems(["rgb", "yuv444", "yuv420"])
+        self.colorspace_combo.setCurrentIndex(2 if self.apple_silicon else 0)
+        self.colorspace_combo.currentTextChanged.connect(self._update_compress_summary)
+
         self.macbook_profile_checkbox = QCheckBox("Use Apple Silicon / MacBook safe runtime")
         self.macbook_profile_checkbox.setChecked(self.apple_silicon)
         self.macbook_profile_checkbox.toggled.connect(self._refresh_platform_status)
@@ -404,6 +416,7 @@ class MainWindow(QMainWindow):
         self.matrix_mode_checkbox.toggled.connect(self._update_compress_summary)
 
         profile_layout.addRow("Preset", self.preset_combo)
+        profile_layout.addRow("Colorspace", self.colorspace_combo)
         profile_layout.addRow("Payload compression", self.comp_combo)
         profile_layout.addRow("", self.macbook_profile_checkbox)
         profile_layout.addRow("", self.matrix_mode_checkbox)
@@ -740,6 +753,7 @@ class MainWindow(QMainWindow):
         self.scene_threshold_spin.setValue(float(defaults["scene_threshold"]))
         self.matrix_mode_checkbox.setChecked(bool(defaults["matrix_mode"]))
         self.comp_combo.setCurrentIndex(int(defaults["compression_index"]))
+        self.colorspace_combo.setCurrentIndex(int(defaults["colorspace_index"]))
 
         is_custom = preset == "custom"
         for widget in (
@@ -747,18 +761,18 @@ class MainWindow(QMainWindow):
             self.slope_spin,
             self.scene_cut_combo,
             self.scene_threshold_spin,
+            self.colorspace_combo,
         ):
             widget.setEnabled(is_custom)
 
         if preset == "anime":
             self.preset_note.setText(
-                "Anime preset now favors cleaner moving edges while still "
-                "keeping Apple Silicon-friendly tile sharing and zstd compression."
+                "Anime preset now uses the new tile-native v3 path with yuv420, "
+                "zstd, and bounded-memory defaults."
             )
         elif preset == "lownoise":
             self.preset_note.setText(
-                "Low-noise preset is slightly denser than anime and tuned for "
-                "clean footage with fewer temporal artifacts."
+                "Low-noise preset uses yuv444 and keeps more chroma detail than anime."
             )
         else:
             self.preset_note.setText(
@@ -778,6 +792,7 @@ class MainWindow(QMainWindow):
             macbook_profile=self.macbook_profile_checkbox.isChecked(),
             matrix_mode=self.matrix_mode_checkbox.isChecked(),
             compression_index=self.comp_combo.currentIndex(),
+            colorspace=self.colorspace_combo.currentText(),
         )
         tune = (
             f"tau={self.tau_spin.value():.3f}, slope={self.slope_spin.value():.4f}, "
@@ -835,8 +850,9 @@ class MainWindow(QMainWindow):
             tau=self.tau_spin.value(),
             slope_threshold=self.slope_spin.value(),
             payload_comp_type=self.comp_combo.currentIndex(),
-            container_version=2,
+            container_version=3,
             dtype="uint8",
+            colorspace=self.colorspace_combo.currentText(),
             macbook_profile=self.macbook_profile_checkbox.isChecked(),
             scene_cut=self.scene_cut_combo.currentText(),
             scene_threshold=self.scene_threshold_spin.value(),

@@ -1,6 +1,6 @@
 # TimeFlowCodec — Per-Pixel Temporal Codec for UI/Animation
 
-Wedge: excels on **UI/animation/temporally coherent content** with per-channel temporal fits (CONST/LINEAR), scene segmentation, tile sharing, and low-rank matrix fallback. Includes runnable codec (CLI/GUI), benchmark harness, and thesis.
+Wedge: excels on **anime, UI capture, and temporally coherent low-noise content** with temporal fits (CONST/LINEAR/RAW), scene segmentation, tile-native storage, and YUV-aware presets. Includes runnable codec (CLI/GUI), benchmark harness, and thesis.
 
 ## Scoreboard (regen with `make bench`)
 | codec | preset | crf | clip | size (bytes) | psnr | ssim |
@@ -10,7 +10,7 @@ Wedge: excels on **UI/animation/temporally coherent content** with per-channel t
 ## Where it wins / fails
 - Wins: UI captures, slides, animation, low-noise static cams (high temporal coherence).
 - Fails: heavy noise, high-motion camera, complex textures (many pixels fall back to raw).
-- Transparent: per-pixel regression, no motion search, no chroma subsampling.
+- Transparent: temporal regression without motion search; v3 adds optional YUV420/YUV444 coding.
 
 ## Core Idea
 For RGB video `V(t, y, x, c)` (channels `c ∈ {R,G,B}`):
@@ -35,9 +35,9 @@ For RGB video `V(t, y, x, c)` (channels `c ∈ {R,G,B}`):
 [G PAYLOAD]
 [B PAYLOAD]
 ```
-- Header (v2 default): width/height/frames, tiling, segment count, color_format=RGB, bits_per_mode=2, payload_comp_type (none/zlib/lzma/zstd).
-- Per-plane payload stores segment streams (mode map RLE + quantized CONST/LINEAR + MATRIX + RAW).
-- Mode maps are bitpacked and RLE-coded. CONST/LINEAR payloads are quantized (no float32 arrays on disk in v2).
+- Header (v3 default): width/height/frames, tiling, segment count, color format (`rgb`, `yuv444`, `yuv420`), bits_per_mode=2, payload_comp_type (none/zlib/lzma/zstd).
+- Per-plane payload stores segment streams (mode map RLE + quantized CONST/LINEAR + RAW). In v3, streams are scan-order implicit and tile-native.
+- Mode maps are bitpacked and RLE-coded. CONST/LINEAR payloads are quantized; no float32 arrays are written on disk in modern containers.
 
 ### Best For
 Temporal coherence (animation, UI captures, low-noise footage). No spatial blocking; all modeling is per pixel per channel.
@@ -73,6 +73,7 @@ Use the low-memory, laptop-friendly profile:
 tfc encode input.mp4 out.tfc --preset anime --macbook-profile
 ```
 This applies safer defaults (`tiling=16`, `max_ram_mb=1536`, `scene_cut=auto`, `uint8` internals) and avoids heavy settings that cause lag on Apple Silicon laptops.
+The `anime` preset also defaults to the compact v3 container and `yuv420`.
 
 Decode with progressive write (default in CLI):
 ```bash
@@ -86,17 +87,18 @@ Install (editable or wheel), then use short commands:
 - Decompress: `tfc decode out.tfc recon.mp4 --fps 30`
 - Alternative entrypoints: `timeflowcodec encode/decode`, `timeflowcompress`, `timeflowdecompress`
 - Presets: `--preset {anime,lownoise,custom}`
+- Colorspace: `--colorspace {rgb,yuv444,yuv420}`
 - Scene segmentation controls: `--scene-cut {off,auto}` and `--scene-threshold 0.35`
 - Matrix low-rank mode is available but experimental on moving content: `--matrix-mode --matrix-tau 0.12 --matrix-rate-ratio 0.95`
 
 Example high-efficiency run:
 ```bash
 tfc encode input.mp4 out.tfc \
-  --container-version 2 \
+  --container-version 3 \
   --preset anime \
+  --colorspace yuv420 \
   --tiling 16 \
-  --scene-cut auto \
-  --matrix-mode
+  --scene-cut auto
 ```
 
 ## GUI
@@ -145,6 +147,6 @@ This produces `dist/TimeFlowCodec.app` and `dist/TimeFlowCodec_macbook_installer
 - `clips/README.md` – guidance on sample clips (use git LFS if adding)
 
 ## Notes
-- Strictly RGB; no YUV420 conversion.
+- v3 adds YUV444/YUV420 coding and tile-native payload streams.
 - Payload compression: none (0), zlib (1), LZMA (2), zstd (3).
-- Mode maps are 2-bit packed + RLE in v2; fallback payload is uint8 and matrix stream is quantized int16 factors.
+- Mode maps are 2-bit packed + RLE; v3 stores CONST/LINEAR/RAW streams without per-sample indices.

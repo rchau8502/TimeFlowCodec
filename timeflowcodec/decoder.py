@@ -1,4 +1,4 @@
-"""RGB per-pixel decoder for TimeFlowCodec (supports v1 and v2 containers)."""
+"""TimeFlowCodec decoder (supports v1/v2/v3 containers)."""
 
 from __future__ import annotations
 
@@ -10,6 +10,8 @@ import numpy as np
 from .constants import (
     BITS_PER_MODE,
     COLOR_FORMAT_RGB,
+    COLOR_FORMAT_YUV420,
+    COLOR_FORMAT_YUV444,
     MODE_FB_RAW,
     MODE_TFC_CONST,
     MODE_TFC_LINEAR,
@@ -21,12 +23,14 @@ from .constants import (
 from .format import (
     VERSION_V1,
     VERSION_V2,
+    VERSION_V3,
     parse_plane_payload_v1,
     parse_plane_payload_v2,
+    parse_plane_payload_v3,
     read_header,
     unpack_modes,
 )
-from .utils import save_video_from_rgb
+from .utils import expand_tile_values, plane_shape, planes_to_rgb, save_video_from_rgb, tile_grid_shape
 
 
 def _prepare_plane_arrays(
@@ -58,7 +62,8 @@ def decode_tfc_to_video(
 
     with open(input_path, "rb") as f:
         header = read_header(f)
-        if header.get("color_format") != COLOR_FORMAT_RGB:
+        color_format = int(header.get("color_format", COLOR_FORMAT_RGB))
+        if color_format not in {COLOR_FORMAT_RGB, COLOR_FORMAT_YUV444, COLOR_FORMAT_YUV420}:
             raise ValueError("Unsupported color format in TFC file")
         if header.get("bits_per_mode") != BITS_PER_MODE:
             raise ValueError("Unexpected bits_per_mode in TFC file")
@@ -113,6 +118,18 @@ def decode_tfc_to_video(
         for plane, payload in zip((PLANE_R, PLANE_G, PLANE_B), payloads):
             segments = parse_plane_payload_v2(payload, payload_comp_type, N)
             plane_data[plane] = segments
+    elif version == VERSION_V3:
+        for _ in range(3):
+            if offset + 4 > len(remaining):
+                raise ValueError("Missing payload size")
+            payload_size = struct.unpack("<I", remaining[offset : offset + 4])[0]
+            offset += 4
+            if offset + payload_size > len(remaining):
+                raise ValueError("Incomplete payload data")
+            payloads.append(remaining[offset : offset + payload_size])
+            offset += payload_size
+        for plane, payload in zip((PLANE_R, PLANE_G, PLANE_B), payloads):
+            plane_data[plane] = parse_plane_payload_v3(payload, payload_comp_type)
     else:
         raise ValueError(f"Unsupported version {version}")
 
@@ -187,7 +204,7 @@ def decode_tfc_to_video(
                         vals[:, pix] = fb_arr[fb_map[int(pix)]]
                 flat[:, :, plane] = np.clip(np.rint(vals), 0, 255).astype(np.uint8)
             save_video_from_rgb(frames, output_path, fps=fps)
-    else:
+    elif version == VERSION_V2:
         # v2 segmented payload
         if stream_output:
             writer = imageio.get_writer(output_path, fps=fps)
@@ -284,6 +301,68 @@ def decode_tfc_to_video(
                     flat[:, :, plane] = np.clip(np.rint(vals), 0, 255).astype(np.uint8)
                 all_frames.append(frames)
             frames_out = np.concatenate(all_frames, axis=0)
+            save_video_from_rgb(frames_out, output_path, fps=fps)
+    else:
+        tile_size = int(header.get("tiling", 0) or 1)
+        plane_dims = {
+            plane: plane_shape(H, W, color_format, plane)
+            for plane in (PLANE_R, PLANE_G, PLANE_B)
+        }
+
+        def reconstruct_segment(seg_idx: int) -> np.ndarray:
+            seg_len = plane_data[PLANE_R][seg_idx]["length"]
+            plane_frames: list[np.ndarray] = []
+            for t in range(seg_len):
+                reconstructed_planes = []
+                for plane in (PLANE_R, PLANE_G, PLANE_B):
+                    seg = plane_data[plane][seg_idx]
+                    ph, pw = plane_dims[plane]
+                    modes = np.asarray(seg["modes"], dtype=np.uint8).reshape(-1)
+                    logical_count = modes.size
+                    if logical_count != tile_grid_shape(ph, pw, tile_size)[0] * tile_grid_shape(ph, pw, tile_size)[1]:
+                        raise ValueError("v3 logical mode count does not match plane tile grid")
+                    values = np.zeros((logical_count,), dtype=np.float32)
+                    raw_scan = np.nonzero(modes == MODE_FB_RAW)[0]
+                    raw_values = np.asarray(seg.get("raw_values", []), dtype=np.uint8)
+                    raw_lookup = {
+                        int(idx): row for row, idx in enumerate(raw_scan.tolist())
+                    } if raw_scan.size else {}
+                    for logical_idx, param in seg["tfc_params"].items():
+                        if param["mode"] == MODE_TFC_CONST:
+                            values[int(logical_idx)] = float(param["a"])
+                        elif param["mode"] == MODE_TFC_LINEAR:
+                            values[int(logical_idx)] = float(param["a"]) + float(param.get("b", 0.0)) * float(t)
+                    for logical_idx in raw_scan.tolist():
+                        values[int(logical_idx)] = float(raw_values[raw_lookup[int(logical_idx)], t])
+                    plane_img = expand_tile_values(values, ph, pw, tile_size)
+                    reconstructed_planes.append(
+                        np.clip(np.rint(plane_img), 0, 255).astype(np.uint8)
+                    )
+                plane_frames.append(
+                    planes_to_rgb(
+                        (
+                            reconstructed_planes[0],
+                            reconstructed_planes[1],
+                            reconstructed_planes[2],
+                        ),
+                        color_format,
+                        (H, W),
+                    )
+                )
+            return np.stack(plane_frames, axis=0)
+
+        if stream_output:
+            writer = imageio.get_writer(output_path, fps=fps)
+            for seg_idx in range(len(plane_data[PLANE_R])):
+                seg_frames = reconstruct_segment(seg_idx)
+                for frame in seg_frames:
+                    writer.append_data(frame)
+            writer.close()
+        else:
+            frames_out = np.concatenate(
+                [reconstruct_segment(seg_idx) for seg_idx in range(len(plane_data[PLANE_R]))],
+                axis=0,
+            )
             save_video_from_rgb(frames_out, output_path, fps=fps)
 
     print(f"Decoded {input_path} -> {output_path}. Frames={T}, Size={H}x{W}")

@@ -19,7 +19,7 @@ from .version import get_version_string
 
 def compress_main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
-        description="TimeFlowCodec RGB encoder (per-pixel)"
+        description="TimeFlowCodec encoder"
     )
     parser.add_argument("input", help="Input video path")
     parser.add_argument("output", help="Output .tfc path")
@@ -45,6 +45,13 @@ def compress_main(argv: list[str] | None = None) -> None:
         default="anime",
         choices=["custom", "anime", "lownoise"],
         help="Compression preset (anime/lownoise are optimized for coherent content)",
+    )
+    parser.add_argument(
+        "--colorspace",
+        type=str,
+        default="rgb",
+        choices=["rgb", "yuv444", "yuv420"],
+        help="Internal coding colorspace (anime usually benefits from yuv420)",
     )
     parser.add_argument(
         "--max-frames", type=int, default=None, help="Limit number of frames processed"
@@ -119,6 +126,7 @@ def compress_main(argv: list[str] | None = None) -> None:
         tiling=args.tiling,
         max_ram_mb=args.max_ram_mb,
         dtype=args.dtype,
+        colorspace=args.colorspace,
         macbook_profile=args.macbook_profile,
         scene_cut=args.scene_cut,
         scene_threshold=args.scene_threshold,
@@ -156,7 +164,7 @@ def decompress_main(argv: list[str] | None = None) -> None:
 
 
 def main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(description="TimeFlowCodec (per-pixel RGB)")
+    parser = argparse.ArgumentParser(description="TimeFlowCodec")
     parser.add_argument(
         "--version", action="store_true", help="Show version/build info and exit"
     )
@@ -186,9 +194,16 @@ def main(argv: list[str] | None = None) -> None:
     p_enc.add_argument(
         "--container-version",
         type=int,
-        default=2,
-        choices=[1, 2],
-        help="Container version (2 preferred)",
+        default=3,
+        choices=[1, 2, 3],
+        help="Container version (3 preferred)",
+    )
+    p_enc.add_argument(
+        "--colorspace",
+        type=str,
+        default="rgb",
+        choices=["rgb", "yuv444", "yuv420"],
+        help="Internal coding colorspace",
     )
     p_enc.add_argument("--max-frames", type=int, default=None)
     p_enc.add_argument(
@@ -277,6 +292,7 @@ def main(argv: list[str] | None = None) -> None:
             tiling=args.tiling,
             max_ram_mb=args.max_ram_mb,
             dtype=args.dtype,
+            colorspace=args.colorspace,
             macbook_profile=args.macbook_profile,
             scene_cut=args.scene_cut,
             scene_threshold=args.scene_threshold,

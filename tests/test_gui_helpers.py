@@ -20,3 +20,4 @@ def test_preset_ui_defaults_for_anime():
     assert defaults["scene_cut"] == "auto"
     assert defaults["matrix_mode"] is False
     assert defaults["compression_index"] == 3
+    assert defaults["colorspace_index"] == 2

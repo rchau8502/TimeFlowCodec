@@ -62,3 +62,43 @@ def test_encode_decode_roundtrip(monkeypatch, tmp_path):
         mse(frames[:, 2, 2, 1].astype(np.float32), recon[:, 2, 2, 1].astype(np.float32))
         < 1e-3
     )
+
+
+def test_encode_decode_yuv420_tile_roundtrip(monkeypatch, tmp_path):
+    t, h, w = 5, 8, 8
+    frames = np.zeros((t, h, w, 3), dtype=np.uint8)
+    for i in range(t):
+        frames[i, :, :, 0] = 32 + i * 4
+        frames[i, :, :, 1] = 96
+        frames[i, :, :, 2] = 160 - i * 3
+
+    captured: dict[str, np.ndarray] = {}
+
+    def fake_save_video(arr: np.ndarray, path: str, fps: int = 30):  # noqa: ARG001
+        captured["frames"] = arr.copy()
+
+    class FakeReader:
+        def __iter__(self):
+            for f in frames:
+                yield f
+
+    monkeypatch.setattr("timeflowcodec.encoder.imageio.get_reader", lambda _p: FakeReader())
+    monkeypatch.setattr("timeflowcodec.utils.save_video_from_rgb", fake_save_video)
+    monkeypatch.setattr("timeflowcodec.decoder.save_video_from_rgb", fake_save_video)
+
+    output_tfc = tmp_path / "video_yuv.tfc"
+    recon_video = tmp_path / "recon_yuv.mp4"
+
+    encode_video_to_tfc(
+        "dummy.mp4",
+        str(output_tfc),
+        container_version=3,
+        colorspace="yuv420",
+        tiling=2,
+        preset="custom",
+    )
+    decode_tfc_to_video(str(output_tfc), str(recon_video), stream_output=False)
+
+    recon = captured["frames"]
+    assert recon.shape == frames.shape
+    assert mse(frames, recon) < 1.0

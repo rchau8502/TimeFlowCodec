@@ -1,8 +1,10 @@
-"""RGB TimeFlowCodec per-pixel temporal modeling."""
+"""TimeFlowCodec temporal modeling codec."""
 
 from .constants import (
     BITS_PER_MODE,
     COLOR_FORMAT_RGB,
+    COLOR_FORMAT_YUV420,
+    COLOR_FORMAT_YUV444,
     COMP_LZMA,
     COMP_NONE,
     COMP_ZLIB,
@@ -34,6 +36,8 @@ __all__ = [
     "DEFAULT_TAU",
     "DEFAULT_SLOPE_THRESHOLD",
     "COLOR_FORMAT_RGB",
+    "COLOR_FORMAT_YUV444",
+    "COLOR_FORMAT_YUV420",
     "BITS_PER_MODE",
     "COMP_NONE",
     "COMP_ZLIB",

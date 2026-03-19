@@ -1,4 +1,4 @@
-"""Binary format helpers for RGB TimeFlowCodec (.tfc)."""
+"""Binary format helpers for TimeFlowCodec (.tfc)."""
 
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ from .constants import (
     COMP_NONE,
     COMP_ZLIB,
     COMP_ZSTD,
+    MODE_FB_RAW,
     MODE_TFC_CONST,
     MODE_TFC_LINEAR,
     MODE_TFC_MATRIX,
@@ -30,8 +31,10 @@ except ImportError:  # pragma: no cover - tested via runtime behavior
 MAGIC = b"TFC1"
 VERSION_V1 = 1
 VERSION_V2 = 2
+VERSION_V3 = 3
 HEADER_SIZE_V1 = 32
 HEADER_SIZE_V2 = 40
+HEADER_SIZE_V3 = 40
 
 
 def pack_modes(modes: np.ndarray, bits_per_mode: int = BITS_PER_MODE) -> bytes:
@@ -95,7 +98,7 @@ def _rle_decode(data: bytes) -> bytes:
 
 def write_header(f, header: dict) -> None:
     """Write header for v1 or v2."""
-    version = int(header.get("version", VERSION_V2))
+    version = int(header.get("version", VERSION_V3))
     if version == VERSION_V1:
         git_hash_bytes = header.get("encoder_git_hash", b"")
         if isinstance(git_hash_bytes, str):
@@ -115,7 +118,7 @@ def write_header(f, header: dict) -> None:
             git_hash_bytes,
         )
         f.write(packed)
-    else:
+    elif version in {VERSION_V2, VERSION_V3}:
         git_hash_bytes = header.get("encoder_git_hash", b"")
         if isinstance(git_hash_bytes, str):
             git_hash_bytes = git_hash_bytes.encode("utf-8")
@@ -123,7 +126,7 @@ def write_header(f, header: dict) -> None:
         packed = struct.pack(
             "<4sHHIII BBB HH 5s 8s",
             MAGIC,
-            VERSION_V2,
+            version,
             HEADER_SIZE_V2,
             int(header["width"]),
             int(header["height"]),
@@ -137,6 +140,8 @@ def write_header(f, header: dict) -> None:
             git_hash_bytes,
         )
         f.write(packed)
+    else:
+        raise ValueError(f"Unsupported header version {version}")
 
 
 def read_header(f) -> dict:
@@ -179,7 +184,7 @@ def read_header(f) -> dict:
             "tiling": 0,
             "segment_count": 1,
         }
-    elif version == VERSION_V2:
+    elif version in {VERSION_V2, VERSION_V3}:
         rest = f.read(HEADER_SIZE_V2 - 6)
         if len(rest) != HEADER_SIZE_V2 - 6:
             raise ValueError("Incomplete header")
@@ -200,7 +205,7 @@ def read_header(f) -> dict:
             raise ValueError("Unsupported header size")
         return {
             "magic": MAGIC,
-            "version": VERSION_V2,
+            "version": version,
             "header_size": header_size,
             "width": width,
             "height": height,
@@ -507,4 +512,160 @@ def parse_plane_payload_v2(comp_payload: bytes, payload_comp_type: int, N: int):
             }
         )
 
+    return segments
+
+
+def build_plane_payload_v3(
+    segments: list[dict],
+    payload_comp_type: int,
+) -> bytes:
+    """Version 3 payload with implicit scan-order streams and no per-sample indices."""
+    buf = io.BytesIO()
+    buf.write(struct.pack("<I", len(segments)))
+    for seg in segments:
+        modes = np.asarray(seg["modes"], dtype=np.uint8).reshape(-1)
+        logical_count = int(modes.size)
+        raw_values = np.asarray(seg.get("raw_values", []), dtype=np.uint8)
+        tfc_params = seg.get("tfc_params", {})
+        seg_len = int(seg["length"])
+
+        const_scan = np.nonzero(modes == MODE_TFC_CONST)[0]
+        linear_scan = np.nonzero(modes == MODE_TFC_LINEAR)[0]
+        raw_scan = np.nonzero(modes == MODE_FB_RAW)[0]
+        mode_rle = _rle_encode(pack_modes(modes, bits_per_mode=BITS_PER_MODE))
+
+        linear_params = [tfc_params[int(idx)] for idx in linear_scan]
+        max_abs_b = max((abs(float(p.get("b", 0.0))) for p in linear_params), default=0.0)
+        b_scale = 1.0 if max_abs_b == 0.0 else max_abs_b / 32767.0
+
+        buf.write(
+            struct.pack(
+                "<III f III",
+                seg_len,
+                logical_count,
+                len(mode_rle),
+                float(b_scale),
+                int(const_scan.size),
+                int(linear_scan.size),
+                int(raw_scan.size),
+            )
+        )
+        buf.write(mode_rle)
+
+        if const_scan.size:
+            const_vals = np.array(
+                [np.uint8(np.clip(round(float(tfc_params[int(idx)]["a"])), 0, 255)) for idx in const_scan],
+                dtype=np.uint8,
+            )
+            buf.write(const_vals.tobytes())
+
+        if linear_scan.size:
+            linear_a = np.array(
+                [np.uint8(np.clip(round(float(tfc_params[int(idx)]["a"])), 0, 255)) for idx in linear_scan],
+                dtype=np.uint8,
+            )
+            if b_scale == 0.0:
+                linear_b = np.zeros((linear_scan.size,), dtype=np.int16)
+            else:
+                linear_b = np.array(
+                    [
+                        int(
+                            np.clip(
+                                round(float(tfc_params[int(idx)].get("b", 0.0)) / b_scale),
+                                -32768,
+                                32767,
+                            )
+                        )
+                        for idx in linear_scan
+                    ],
+                    dtype=np.int16,
+                )
+            buf.write(linear_a.tobytes())
+            buf.write(linear_b.tobytes())
+
+        if raw_scan.size:
+            expected_shape = (int(raw_scan.size), seg_len)
+            raw_values = np.asarray(raw_values, dtype=np.uint8)
+            if raw_values.shape != expected_shape:
+                raise ValueError(
+                    f"v3 raw_values shape mismatch: expected {expected_shape}, got {raw_values.shape}"
+                )
+            buf.write(raw_values.tobytes())
+
+    return _compress_payload(buf.getvalue(), payload_comp_type)
+
+
+def parse_plane_payload_v3(comp_payload: bytes, payload_comp_type: int):
+    """Parse a version 3 plane payload."""
+    payload = _decompress_payload(comp_payload, payload_comp_type)
+    bio = io.BytesIO(payload)
+    seg_count_raw = bio.read(4)
+    if len(seg_count_raw) != 4:
+        raise ValueError("Incomplete v3 payload (segment count)")
+    seg_count = struct.unpack("<I", seg_count_raw)[0]
+    segments = []
+    for _ in range(seg_count):
+        seg_hdr = bio.read(28)
+        if len(seg_hdr) != 28:
+            raise ValueError("Incomplete v3 segment header")
+        seg_len, logical_count, mode_len, b_scale, const_count, linear_count, raw_count = struct.unpack(
+            "<III f III", seg_hdr
+        )
+        mode_rle = bio.read(mode_len)
+        if len(mode_rle) != mode_len:
+            raise ValueError("Incomplete v3 mode stream")
+        modes = unpack_modes(_rle_decode(mode_rle), logical_count, bits_per_mode=BITS_PER_MODE)
+
+        tfc_params: Dict[int, Dict[str, float]] = {}
+        const_scan = np.nonzero(modes == MODE_TFC_CONST)[0]
+        linear_scan = np.nonzero(modes == MODE_TFC_LINEAR)[0]
+        raw_scan = np.nonzero(modes == MODE_FB_RAW)[0]
+
+        if const_count != int(const_scan.size):
+            raise ValueError("Const stream count does not match mode map")
+        if linear_count != int(linear_scan.size):
+            raise ValueError("Linear stream count does not match mode map")
+        if raw_count != int(raw_scan.size):
+            raise ValueError("Raw stream count does not match mode map")
+
+        if const_count:
+            const_raw = bio.read(const_count)
+            if len(const_raw) != const_count:
+                raise ValueError("Incomplete v3 const stream")
+            const_vals = np.frombuffer(const_raw, dtype=np.uint8)
+            for logical_idx, a_q in zip(const_scan.tolist(), const_vals.tolist()):
+                tfc_params[int(logical_idx)] = {"mode": MODE_TFC_CONST, "a": float(a_q)}
+
+        if linear_count:
+            a_raw = bio.read(linear_count)
+            b_raw = bio.read(2 * linear_count)
+            if len(a_raw) != linear_count or len(b_raw) != 2 * linear_count:
+                raise ValueError("Incomplete v3 linear stream")
+            linear_a = np.frombuffer(a_raw, dtype=np.uint8)
+            linear_b = np.frombuffer(b_raw, dtype=np.int16)
+            for logical_idx, a_q, b_q in zip(
+                linear_scan.tolist(), linear_a.tolist(), linear_b.tolist()
+            ):
+                tfc_params[int(logical_idx)] = {
+                    "mode": MODE_TFC_LINEAR,
+                    "a": float(a_q),
+                    "b": float(b_q) * float(b_scale),
+                }
+
+        raw_values = np.empty((0, seg_len), dtype=np.uint8)
+        if raw_count:
+            raw_raw = bio.read(raw_count * seg_len)
+            if len(raw_raw) != raw_count * seg_len:
+                raise ValueError("Incomplete v3 raw stream")
+            raw_values = np.frombuffer(raw_raw, dtype=np.uint8).reshape(raw_count, seg_len).copy()
+
+        segments.append(
+            {
+                "length": int(seg_len),
+                "logical_count": int(logical_count),
+                "modes": modes,
+                "tfc_params": tfc_params,
+                "raw_values": raw_values,
+            }
+        )
     return segments
