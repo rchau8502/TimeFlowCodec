@@ -290,7 +290,6 @@ def encode_video_to_tfc(
                 scene_cut=scene_cut,
             )
         )
-        matrix_mode = True if not matrix_mode else matrix_mode
 
     dtype_map = {"uint8": np.uint8, "uint16": np.uint16, "float16": np.float16}
     if dtype not in dtype_map:
