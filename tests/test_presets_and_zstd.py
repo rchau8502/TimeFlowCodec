@@ -39,7 +39,7 @@ def test_preset_anime_defaults_upgrade_compression_and_tools():
     assert tiling == 16
     assert max_ram_mb == 2500
     assert scene_cut == "auto"
-    assert matrix_mode is True
+    assert matrix_mode is False
 
 
 @pytest.mark.skipif(
@@ -81,4 +81,3 @@ def test_encode_decode_zstd_roundtrip(monkeypatch, tmp_path):
     decode_tfc_to_video(str(out_tfc), str(out_mp4), stream_output=False)
     assert "frames" in captured
     np.testing.assert_array_equal(captured["frames"], frames)
-

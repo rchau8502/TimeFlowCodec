@@ -50,20 +50,20 @@ def _suggest_output_path(input_path: str, suffix: str) -> str:
 def _preset_ui_defaults(preset: str) -> dict[str, float | int | bool | str]:
     if preset == "anime":
         return {
-            "tau": 0.20,
-            "slope_threshold": 0.003,
+            "tau": 0.06,
+            "slope_threshold": 0.0015,
             "scene_cut": "auto",
             "scene_threshold": 0.27,
-            "matrix_mode": True,
+            "matrix_mode": False,
             "compression_index": 3,
         }
     if preset == "lownoise":
         return {
-            "tau": 0.14,
+            "tau": 0.08,
             "slope_threshold": 0.0015,
             "scene_cut": "auto",
             "scene_threshold": 0.32,
-            "matrix_mode": True,
+            "matrix_mode": False,
             "compression_index": 3,
         }
     return {
@@ -368,8 +368,8 @@ class MainWindow(QMainWindow):
         self.macbook_profile_checkbox.setChecked(self.apple_silicon)
         self.macbook_profile_checkbox.toggled.connect(self._refresh_platform_status)
 
-        self.matrix_mode_checkbox = QCheckBox("Enable matrix low-rank fallback")
-        self.matrix_mode_checkbox.setChecked(True)
+        self.matrix_mode_checkbox = QCheckBox("Enable matrix low-rank fallback (experimental)")
+        self.matrix_mode_checkbox.setChecked(False)
 
         profile_layout.addRow("Preset", self.preset_combo)
         profile_layout.addRow("Payload compression", self.comp_combo)
@@ -647,18 +647,18 @@ class MainWindow(QMainWindow):
 
         if preset == "anime":
             self.preset_note.setText(
-                "Anime preset raises model tolerance, keeps matrix mode on, "
-                "and targets stronger compression on flat or temporally coherent content."
+                "Anime preset now favors cleaner moving edges while still "
+                "keeping Apple Silicon-friendly tile sharing and zstd compression."
             )
         elif preset == "lownoise":
             self.preset_note.setText(
-                "Low-noise preset is more conservative than anime but still "
-                "optimized for clean footage with stable backgrounds."
+                "Low-noise preset is slightly denser than anime and tuned for "
+                "clean footage with fewer temporal artifacts."
             )
         else:
             self.preset_note.setText(
                 "Custom preset exposes the raw knobs. Use this only if you know "
-                "you need different rate/distortion behavior."
+                "you need different rate/distortion behavior. Matrix mode is experimental."
             )
 
     def _set_busy_state(self, compress: bool, running: bool, status: str) -> None:

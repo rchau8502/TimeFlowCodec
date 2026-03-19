@@ -87,7 +87,7 @@ Install (editable or wheel), then use short commands:
 - Alternative entrypoints: `timeflowcodec encode/decode`, `timeflowcompress`, `timeflowdecompress`
 - Presets: `--preset {anime,lownoise,custom}`
 - Scene segmentation controls: `--scene-cut {off,auto}` and `--scene-threshold 0.35`
-- Matrix low-rank mode (helps RAW-heavy tiles): `--matrix-mode --matrix-tau 0.12 --matrix-rate-ratio 0.95`
+- Matrix low-rank mode is available but experimental on moving content: `--matrix-mode --matrix-tau 0.12 --matrix-rate-ratio 0.95`
 
 Example high-efficiency run:
 ```bash

@@ -16,7 +16,7 @@ def test_suggest_output_path_swaps_suffix():
 
 def test_preset_ui_defaults_for_anime():
     defaults = _preset_ui_defaults("anime")
-    assert defaults["tau"] == 0.20
+    assert defaults["tau"] == 0.06
     assert defaults["scene_cut"] == "auto"
-    assert defaults["matrix_mode"] is True
+    assert defaults["matrix_mode"] is False
     assert defaults["compression_index"] == 3
