@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
     QSizePolicy,
     QSpinBox,
     QTabWidget,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -74,6 +75,23 @@ def _preset_ui_defaults(preset: str) -> dict[str, float | int | bool | str]:
         "matrix_mode": False,
         "compression_index": 3,
     }
+
+
+def _compression_mode_label(
+    preset: str, macbook_profile: bool, matrix_mode: bool, compression_index: int
+) -> str:
+    compression_name = ["none", "zlib", "lzma", "zstd"][compression_index]
+    platform_name = "Apple Silicon safe" if macbook_profile else "standard runtime"
+    matrix_name = "matrix on" if matrix_mode else "matrix off"
+    return (
+        f"{preset} preset, {compression_name}, {platform_name}, {matrix_name}. "
+        "Optimized for bounded-memory desktop use."
+    )
+
+
+def _demo_asset(name: str) -> str:
+    path = Path(__file__).resolve().parent / "demo_assets" / name
+    return str(path) if path.exists() else ""
 
 
 class FileDropLineEdit(QLineEdit):
@@ -346,6 +364,18 @@ class MainWindow(QMainWindow):
         io_layout.addRow(
             "Output .tfc", self._build_path_row(self.out_tfc_edit, self._browse_output_tfc)
         )
+
+        demo_row = QHBoxLayout()
+        demo_row.setSpacing(10)
+        self.load_demo_video_btn = QPushButton("Load Demo Video")
+        self.load_demo_video_btn.clicked.connect(self._load_demo_video)
+        self.load_demo_video_btn.setEnabled(bool(_demo_asset("demo_input.mp4")))
+        demo_hint = QLabel("Use the bundled sample clip for a quick check.")
+        demo_hint.setObjectName("cardCopy")
+        demo_hint.setWordWrap(True)
+        demo_row.addWidget(self.load_demo_video_btn)
+        demo_row.addWidget(demo_hint, 1)
+        io_layout.addRow("Demo", demo_row)
         layout.addWidget(io_card)
 
         controls = QHBoxLayout()
@@ -363,6 +393,7 @@ class MainWindow(QMainWindow):
         self.comp_combo = QComboBox()
         self.comp_combo.addItems(["None", "zlib", "LZMA", "zstd"])
         self.comp_combo.setCurrentIndex(3)
+        self.comp_combo.currentIndexChanged.connect(self._update_compress_summary)
 
         self.macbook_profile_checkbox = QCheckBox("Use Apple Silicon / MacBook safe runtime")
         self.macbook_profile_checkbox.setChecked(self.apple_silicon)
@@ -370,6 +401,7 @@ class MainWindow(QMainWindow):
 
         self.matrix_mode_checkbox = QCheckBox("Enable matrix low-rank fallback (experimental)")
         self.matrix_mode_checkbox.setChecked(False)
+        self.matrix_mode_checkbox.toggled.connect(self._update_compress_summary)
 
         profile_layout.addRow("Preset", self.preset_combo)
         profile_layout.addRow("Payload compression", self.comp_combo)
@@ -381,8 +413,40 @@ class MainWindow(QMainWindow):
         self.platform_status.setObjectName("cardCopy")
         profile_layout.addRow("Platform", self.platform_status)
 
-        model_card = self._make_card()
-        model_layout = QFormLayout(model_card)
+        self.summary_card = self._make_card()
+        summary_layout = QVBoxLayout(self.summary_card)
+        summary_layout.setContentsMargins(20, 18, 20, 18)
+        summary_layout.setSpacing(10)
+
+        summary_title = QLabel("Workflow Summary")
+        summary_title.setObjectName("cardTitle")
+        self.compress_summary = QLabel("")
+        self.compress_summary.setObjectName("cardCopy")
+        self.compress_summary.setWordWrap(True)
+
+        summary_strip = QHBoxLayout()
+        summary_strip.setSpacing(8)
+        self.speed_badge = self._make_badge("Fast decode")
+        self.memory_badge = self._make_badge("Bounded RAM")
+        self.preset_badge = self._make_badge("Anime tuned")
+        summary_strip.addWidget(self.speed_badge)
+        summary_strip.addWidget(self.memory_badge)
+        summary_strip.addWidget(self.preset_badge)
+        summary_strip.addStretch(1)
+
+        self.advanced_toggle = QToolButton()
+        self.advanced_toggle.setText("Advanced controls")
+        self.advanced_toggle.setCheckable(True)
+        self.advanced_toggle.setChecked(False)
+        self.advanced_toggle.toggled.connect(self._toggle_advanced_controls)
+
+        summary_layout.addWidget(summary_title)
+        summary_layout.addLayout(summary_strip)
+        summary_layout.addWidget(self.compress_summary)
+        summary_layout.addWidget(self.advanced_toggle, alignment=Qt.AlignLeft)
+
+        self.advanced_card = self._make_card()
+        model_layout = QFormLayout(self.advanced_card)
         model_layout.setContentsMargins(20, 18, 20, 18)
         model_layout.setSpacing(14)
 
@@ -390,19 +454,23 @@ class MainWindow(QMainWindow):
         self.tau_spin.setDecimals(4)
         self.tau_spin.setRange(0.0, 10.0)
         self.tau_spin.setSingleStep(0.01)
+        self.tau_spin.valueChanged.connect(self._update_compress_summary)
 
         self.slope_spin = QDoubleSpinBox()
         self.slope_spin.setDecimals(6)
         self.slope_spin.setRange(0.0, 1.0)
         self.slope_spin.setSingleStep(0.0005)
+        self.slope_spin.valueChanged.connect(self._update_compress_summary)
 
         self.scene_cut_combo = QComboBox()
         self.scene_cut_combo.addItems(["off", "auto"])
+        self.scene_cut_combo.currentTextChanged.connect(self._update_compress_summary)
 
         self.scene_threshold_spin = QDoubleSpinBox()
         self.scene_threshold_spin.setDecimals(3)
         self.scene_threshold_spin.setRange(0.01, 2.0)
         self.scene_threshold_spin.setSingleStep(0.05)
+        self.scene_threshold_spin.valueChanged.connect(self._update_compress_summary)
 
         model_layout.addRow("Tau", self.tau_spin)
         model_layout.addRow("Slope threshold", self.slope_spin)
@@ -415,7 +483,12 @@ class MainWindow(QMainWindow):
         model_layout.addRow("Note", self.preset_note)
 
         controls.addWidget(profile_card, 1)
-        controls.addWidget(model_card, 1)
+        right_col = QVBoxLayout()
+        right_col.setSpacing(16)
+        right_col.addWidget(self.summary_card)
+        right_col.addWidget(self.advanced_card)
+        right_col.addStretch(1)
+        controls.addLayout(right_col, 1)
         layout.addLayout(controls)
 
         action_card = self._make_card()
@@ -443,6 +516,8 @@ class MainWindow(QMainWindow):
         layout.addStretch(1)
         self._on_preset_changed(self.preset_combo.currentText())
         self._refresh_platform_status()
+        self._toggle_advanced_controls(False)
+        self._update_compress_summary()
         return page
 
     def _build_decompress_tab(self) -> QWidget:
@@ -476,6 +551,18 @@ class MainWindow(QMainWindow):
             "Output video",
             self._build_path_row(self.out_video_edit, self._browse_output_video),
         )
+
+        demo_row = QHBoxLayout()
+        demo_row.setSpacing(10)
+        self.load_demo_tfc_btn = QPushButton("Load Demo .tfc")
+        self.load_demo_tfc_btn.clicked.connect(self._load_demo_tfc)
+        self.load_demo_tfc_btn.setEnabled(bool(_demo_asset("demo_input.tfc")))
+        demo_hint = QLabel("Open the bundled sample bitstream and decode it immediately.")
+        demo_hint.setObjectName("cardCopy")
+        demo_hint.setWordWrap(True)
+        demo_row.addWidget(self.load_demo_tfc_btn)
+        demo_row.addWidget(demo_hint, 1)
+        io_layout.addRow("Demo", demo_row)
         layout.addWidget(io_card)
 
         settings_card = self._make_card()
@@ -489,6 +576,7 @@ class MainWindow(QMainWindow):
 
         self.stream_output_checkbox = QCheckBox("Stream decoded frames to disk")
         self.stream_output_checkbox.setChecked(True)
+        self.stream_output_checkbox.toggled.connect(self._update_decode_summary)
 
         self.decode_hint = QLabel(
             "Recommended on Apple Silicon: keep streaming enabled to avoid buffering the full video in RAM."
@@ -496,9 +584,14 @@ class MainWindow(QMainWindow):
         self.decode_hint.setObjectName("cardCopy")
         self.decode_hint.setWordWrap(True)
 
+        self.decode_summary = QLabel("")
+        self.decode_summary.setObjectName("cardCopy")
+        self.decode_summary.setWordWrap(True)
+
         settings_layout.addRow("FPS", self.fps_spin)
         settings_layout.addRow("", self.stream_output_checkbox)
         settings_layout.addRow("Hint", self.decode_hint)
+        settings_layout.addRow("Summary", self.decode_summary)
         layout.addWidget(settings_card)
 
         action_card = self._make_card()
@@ -524,6 +617,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(action_card)
 
         layout.addStretch(1)
+        self._update_decode_summary()
         return page
 
     def _make_card(self) -> QFrame:
@@ -598,6 +692,16 @@ class MainWindow(QMainWindow):
         if path:
             self.out_video_edit.setText(path)
 
+    def _load_demo_video(self) -> None:
+        demo = _demo_asset("demo_input.mp4")
+        if demo:
+            self.in_video_edit.setText(demo)
+
+    def _load_demo_tfc(self) -> None:
+        demo = _demo_asset("demo_input.tfc")
+        if demo:
+            self.in_tfc_edit.setText(demo)
+
     def _autofill_compress_output(self, input_path: str) -> None:
         if not input_path:
             return
@@ -626,6 +730,7 @@ class MainWindow(QMainWindow):
                 "Cross-platform mode. The same UI works on macOS and Linux, "
                 "but the Mac safe profile is still available."
             )
+        self._update_compress_summary()
 
     def _on_preset_changed(self, preset: str) -> None:
         defaults = _preset_ui_defaults(preset)
@@ -659,6 +764,43 @@ class MainWindow(QMainWindow):
             self.preset_note.setText(
                 "Custom preset exposes the raw knobs. Use this only if you know "
                 "you need different rate/distortion behavior. Matrix mode is experimental."
+            )
+        self.preset_badge.setText(f"{preset.title()} tuned")
+        self._update_compress_summary()
+
+    def _toggle_advanced_controls(self, checked: bool) -> None:
+        self.advanced_card.setVisible(checked)
+
+    def _update_compress_summary(self) -> None:
+        preset = self.preset_combo.currentText()
+        summary = _compression_mode_label(
+            preset=preset,
+            macbook_profile=self.macbook_profile_checkbox.isChecked(),
+            matrix_mode=self.matrix_mode_checkbox.isChecked(),
+            compression_index=self.comp_combo.currentIndex(),
+        )
+        tune = (
+            f"tau={self.tau_spin.value():.3f}, slope={self.slope_spin.value():.4f}, "
+            f"scene={self.scene_cut_combo.currentText()}"
+        )
+        self.compress_summary.setText(f"{summary}\nCurrent tuning: {tune}.")
+        self.memory_badge.setText(
+            "Bounded RAM" if self.macbook_profile_checkbox.isChecked() else "Higher RAM"
+        )
+        self.speed_badge.setText(
+            "Tile sharing on"
+            if self.macbook_profile_checkbox.isChecked()
+            else "Manual runtime"
+        )
+
+    def _update_decode_summary(self) -> None:
+        if self.stream_output_checkbox.isChecked():
+            self.decode_summary.setText(
+                "Streaming decode is on. Best for large clips and Apple Silicon laptops."
+            )
+        else:
+            self.decode_summary.setText(
+                "Streaming decode is off. This is simpler, but it buffers the whole video in memory."
             )
 
     def _set_busy_state(self, compress: bool, running: bool, status: str) -> None:

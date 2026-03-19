@@ -104,6 +104,7 @@ tfc encode input.mp4 out.tfc \
 python gui.py
 ```
 The desktop app includes drag-and-drop inputs, automatic output path suggestions, preset-aware controls, and Apple Silicon auto-detection. On M-series Macs, the GUI enables the safe runtime profile by default.
+The latest UI keeps the common path minimal: presets and file selection stay up front, while advanced rate/distortion controls live behind an explicit toggle.
 
 ## Reproduce benchmarks
 ```bash
