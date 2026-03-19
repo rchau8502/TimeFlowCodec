@@ -70,9 +70,9 @@ GUI: `python gui.py`
 ### MacBook quick profile
 Use the low-memory, laptop-friendly profile:
 ```bash
-timeflowcompress input.mp4 out.tfc --macbook-profile
+tfc encode input.mp4 out.tfc --preset anime --macbook-profile
 ```
-This applies safer defaults (`tiling=16`, `max_ram_mb=1536`, `scene_cut=auto`) and avoids heavy settings that cause lag on Apple Silicon laptops.
+This applies safer defaults (`tiling=16`, `max_ram_mb=1536`, `scene_cut=auto`, `uint8` internals) and avoids heavy settings that cause lag on Apple Silicon laptops.
 
 Decode with progressive write (default in CLI):
 ```bash
@@ -103,7 +103,7 @@ tfc encode input.mp4 out.tfc \
 ```bash
 python gui.py
 ```
-Two tabs for compression/decompression; configure preset, tau, slope threshold, and payload compression (None/zlib/LZMA/zstd).
+The desktop app includes drag-and-drop inputs, automatic output path suggestions, preset-aware controls, and Apple Silicon auto-detection. On M-series Macs, the GUI enables the safe runtime profile by default.
 
 ## Reproduce benchmarks
 ```bash
@@ -130,7 +130,7 @@ macOS:
 This produces `dist/TimeFlowCodec.app` and `dist/TimeFlowCodec_macbook_installer.dmg`.
 
 ## Releases
-- Package metadata is defined in `pyproject.toml` (`timeflowcodec` version `0.1.0`).
+- Package metadata is defined in `pyproject.toml` (`timeflowcodec` version `0.2.0`).
 - To publish artifacts, build with `python -m build` and upload your wheel/sdist to your chosen index (e.g., `twine upload dist/*`).
 
 ## Project Layout

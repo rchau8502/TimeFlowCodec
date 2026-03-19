@@ -5,8 +5,11 @@ APP_NAME="TimeFlowCodec"
 DIST_DIR="dist"
 APP_PATH="$DIST_DIR/$APP_NAME.app"
 DMG_PATH="$DIST_DIR/${APP_NAME}_macbook_installer.dmg"
+ARCH_NAME="$(uname -m)"
 
-python3 -m pip install --upgrade pyinstaller "imageio[ffmpeg]" PySide6
+echo "Building $APP_NAME for macOS architecture: $ARCH_NAME"
+
+python3 -m pip install --upgrade pyinstaller "imageio[ffmpeg]" PySide6 zstandard
 pyinstaller --noconfirm --clean timeflowcodec_gui.spec
 
 if [[ ! -d "$APP_PATH" ]]; then

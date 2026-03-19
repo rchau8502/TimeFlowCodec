@@ -2,6 +2,8 @@
 
 block_cipher = None
 
+import platform
+
 from PyInstaller.utils.hooks import collect_all
 
 datas = []
@@ -13,6 +15,19 @@ for pkg in ("imageio", "imageio_ffmpeg"):
     datas += _d
     binaries += _b
     hiddenimports += _h
+
+target_arch = None
+if platform.system() == "Darwin" and platform.machine().lower() in {"arm64", "aarch64"}:
+    target_arch = "arm64"
+
+info_plist = {
+    "CFBundleDisplayName": "TimeFlowCodec",
+    "CFBundleName": "TimeFlowCodec",
+    "CFBundleShortVersionString": "0.2.0",
+    "CFBundleVersion": "0.2.0",
+    "LSMinimumSystemVersion": "12.0",
+    "NSHighResolutionCapable": True,
+}
 
 a = Analysis(
     ['gui.py'],
@@ -51,8 +66,8 @@ app = BUNDLE(
     name='TimeFlowCodec.app',
     icon=None,
     bundle_identifier='com.timeflowcodec.gui',
-    info_plist=None,
+    info_plist=info_plist,
     manifest=None,
     resources=[],
-    target_arch=None,
+    target_arch=target_arch,
 )
