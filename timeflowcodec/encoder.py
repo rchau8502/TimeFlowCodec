@@ -105,13 +105,13 @@ def _apply_preset_defaults(
         return (
             VERSION_V3 if container_version == 2 else container_version,
             COLOR_FORMAT_YUV420 if color_format == COLOR_FORMAT_RGB else color_format,
-            0.06 if tau == DEFAULT_TAU else tau,
-            0.0015 if slope_threshold == DEFAULT_SLOPE_THRESHOLD else slope_threshold,
+            0.035 if tau == DEFAULT_TAU else tau,
+            0.0012 if slope_threshold == DEFAULT_SLOPE_THRESHOLD else slope_threshold,
             COMP_ZSTD if payload_comp_type == COMP_ZLIB else payload_comp_type,
-            16 if tiling is None else tiling,
+            8 if tiling is None else tiling,
             2500 if max_ram_mb is None else max_ram_mb,
             "auto" if scene_cut == "off" else scene_cut,
-            0.27 if scene_threshold == 0.35 else scene_threshold,
+            0.22 if scene_threshold == 0.35 else scene_threshold,
             matrix_mode,
             0.22 if matrix_tau == 0.12 else matrix_tau,
             1.05 if matrix_rate_ratio == 0.95 else matrix_rate_ratio,
@@ -121,13 +121,13 @@ def _apply_preset_defaults(
         return (
             VERSION_V3 if container_version == 2 else container_version,
             COLOR_FORMAT_YUV444 if color_format == COLOR_FORMAT_RGB else color_format,
-            0.08 if tau == DEFAULT_TAU else tau,
-            0.0015 if slope_threshold == DEFAULT_SLOPE_THRESHOLD else slope_threshold,
+            0.05 if tau == DEFAULT_TAU else tau,
+            0.0012 if slope_threshold == DEFAULT_SLOPE_THRESHOLD else slope_threshold,
             COMP_ZSTD if payload_comp_type == COMP_ZLIB else payload_comp_type,
-            16 if tiling is None else tiling,
+            8 if tiling is None else tiling,
             2500 if max_ram_mb is None else max_ram_mb,
             "auto" if scene_cut == "off" else scene_cut,
-            0.32 if scene_threshold == 0.35 else scene_threshold,
+            0.24 if scene_threshold == 0.35 else scene_threshold,
             matrix_mode,
             0.14 if matrix_tau == 0.12 else matrix_tau,
             1.00 if matrix_rate_ratio == 0.95 else matrix_rate_ratio,
@@ -203,6 +203,7 @@ def _encode_plane_from_stats(
     T: int,
     tau: float,
     slope_threshold: float,
+    edge_strength: np.ndarray | None = None,
 ):
     """
     Vectorized per-plane encode using precomputed sums to avoid storing frames.
@@ -234,8 +235,19 @@ def _encode_plane_from_stats(
     D_sig = sum_s2 / n + 1e-8
     r = D_tfc / D_sig
 
-    modeled = r <= tau
-    const_mask = modeled & (np.abs(b) < slope_threshold)
+    tau_arr = np.full((N,), float(tau), dtype=np.float64)
+    slope_arr = np.full((N,), float(slope_threshold), dtype=np.float64)
+    if edge_strength is not None:
+        edge_strength = np.asarray(edge_strength, dtype=np.float64).reshape(N)
+        flat_mask = edge_strength < 6.0
+        edge_mask = edge_strength > 20.0
+        tau_arr[flat_mask] *= 1.45
+        tau_arr[edge_mask] *= 0.72
+        slope_arr[flat_mask] *= 1.35
+        slope_arr[edge_mask] *= 0.55
+
+    modeled = r <= tau_arr
+    const_mask = modeled & (np.abs(b) < slope_arr)
     zero_mask = sum_s2 == 0
     const_mask |= zero_mask
     linear_mask = modeled & (~const_mask)
@@ -260,6 +272,8 @@ def _encode_plane_from_stats(
         int(const_mask.sum()),
         int(linear_mask.sum()),
         int(fallback_mask.sum()),
+        a.astype(np.float32, copy=False),
+        b.astype(np.float32, copy=False),
     )
 
 
@@ -389,6 +403,7 @@ def encode_video_to_tfc(
                     "sum_s": np.zeros_like(plane_infos[plane]["counts"], dtype=np.float64),
                     "sum_ts": np.zeros_like(plane_infos[plane]["counts"], dtype=np.float64),
                     "sum_s2": np.zeros_like(plane_infos[plane]["counts"], dtype=np.float64),
+                    "edge_sum": np.zeros_like(plane_infos[plane]["counts"], dtype=np.float64),
                 }
                 for plane in (PLANE_R, PLANE_G, PLANE_B)
             }
@@ -410,6 +425,11 @@ def encode_video_to_tfc(
                 current_stats[plane]["sum_s2"] += tile_reduce_sum(
                     plane_arr.astype(np.float64, copy=False) ** 2.0, tile_size
                 )
+                plane_f = plane_arr.astype(np.float32, copy=False)
+                grad = np.zeros_like(plane_f, dtype=np.float32)
+                grad[1:, :] += np.abs(plane_f[1:, :] - plane_f[:-1, :])
+                grad[:, 1:] += np.abs(plane_f[:, 1:] - plane_f[:, :-1])
+                current_stats[plane]["edge_sum"] += tile_reduce_sum(grad, tile_size)
 
         accumulate_v3(first_rgb, t_idx)
         frames_consumed += 1
@@ -456,7 +476,12 @@ def encode_video_to_tfc(
             seg_len = seg_lengths[seg_idx]
             for plane in (PLANE_R, PLANE_G, PLANE_B):
                 logical_counts = plane_infos[plane]["counts"]
-                modes, tfc_params, fb_mask, _c_const, _c_lin, _c_raw = _encode_plane_from_stats(
+                edge_strength = None
+                if preset == "anime":
+                    edge_strength = seg_stat[plane]["edge_sum"] / (
+                        plane_infos[plane]["counts"] * max(seg_len, 1)
+                    )
+                modes, tfc_params, fb_mask, _c_const, _c_lin, _c_raw, fit_a, fit_b = _encode_plane_from_stats(
                     seg_stat[plane]["sum_s"],
                     seg_stat[plane]["sum_ts"],
                     seg_stat[plane]["sum_s2"],
@@ -464,14 +489,20 @@ def encode_video_to_tfc(
                     seg_len,
                     tau,
                     slope_threshold,
+                    edge_strength=edge_strength,
                 )
+                raw_predictors = {
+                    int(idx): {"a": float(fit_a[idx]), "b": float(fit_b[idx])}
+                    for idx in np.nonzero(fb_mask)[0]
+                }
                 plane_segments[plane].append(
                     {
                         "length": seg_len,
                         "modes": modes,
                         "tfc_params": tfc_params,
                         "raw_mask": fb_mask,
-                        "raw_values": np.empty((0, seg_len), dtype=np.uint8),
+                        "raw_predictors": raw_predictors,
+                        "raw_residuals": np.empty((0, seg_len), dtype=np.int16),
                     }
                 )
 
@@ -552,7 +583,26 @@ def encode_video_to_tfc(
                 for seg_idx, idxs in enumerate(raw_indices[plane]):
                     buf = raw_buffers[plane][seg_idx]
                     if buf is not None:
-                        plane_segments[plane][seg_idx]["raw_values"] = np.asarray(buf, dtype=np.uint8).copy()
+                        raw_means = np.asarray(buf, dtype=np.uint8).astype(
+                            np.float32, copy=False
+                        )
+                        predictors = plane_segments[plane][seg_idx]["raw_predictors"]
+                        idx_list = idxs.tolist()
+                        t_range = np.arange(seg_lengths[seg_idx], dtype=np.float32)[
+                            None, :
+                        ]
+                        pred_a = np.array(
+                            [predictors[int(idx)]["a"] for idx in idx_list],
+                            dtype=np.float32,
+                        )[:, None]
+                        pred_b = np.array(
+                            [predictors[int(idx)]["b"] for idx in idx_list],
+                            dtype=np.float32,
+                        )[:, None]
+                        pred = pred_a + pred_b * t_range
+                        plane_segments[plane][seg_idx]["raw_residuals"] = np.clip(
+                            np.rint(raw_means - pred), -32767, 32767
+                        ).astype(np.int16)
                     if tmpfiles[plane][seg_idx]:
                         Path(tmpfiles[plane][seg_idx]).unlink(missing_ok=True)
 
@@ -632,7 +682,7 @@ def encode_video_to_tfc(
         for seg_idx, seg_stat in enumerate(segments_stats):
             seg_len = seg_lengths[seg_idx]
             for plane, _name in zip((PLANE_R, PLANE_G, PLANE_B), "RGB"):
-                modes_tile, params_tile, fb_mask_tile, c_const, c_lin, _ = (
+                modes_tile, params_tile, fb_mask_tile, c_const, c_lin, _, _fit_a_tile, _fit_b_tile = (
                     _encode_plane_from_stats(
                         seg_stat["sum_s"][plane],
                         seg_stat["sum_ts"][plane],
@@ -866,7 +916,8 @@ def encode_video_to_tfc(
                         "length": seg_lengths[idx],
                         "modes": plane_segments[plane][idx]["modes"],
                         "tfc_params": plane_segments[plane][idx]["tfc_params"],
-                        "raw_values": plane_segments[plane][idx]["raw_values"],
+                        "raw_predictors": plane_segments[plane][idx]["raw_predictors"],
+                        "raw_residuals": plane_segments[plane][idx]["raw_residuals"],
                     }
                     for idx in range(len(seg_lengths))
                 ]

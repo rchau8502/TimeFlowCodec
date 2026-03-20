@@ -525,8 +525,9 @@ def build_plane_payload_v3(
     for seg in segments:
         modes = np.asarray(seg["modes"], dtype=np.uint8).reshape(-1)
         logical_count = int(modes.size)
-        raw_values = np.asarray(seg.get("raw_values", []), dtype=np.uint8)
         tfc_params = seg.get("tfc_params", {})
+        raw_predictors = seg.get("raw_predictors", {})
+        raw_residuals = np.asarray(seg.get("raw_residuals", []), dtype=np.int16)
         seg_len = int(seg["length"])
 
         const_scan = np.nonzero(modes == MODE_TFC_CONST)[0]
@@ -534,17 +535,22 @@ def build_plane_payload_v3(
         raw_scan = np.nonzero(modes == MODE_FB_RAW)[0]
         mode_rle = _rle_encode(pack_modes(modes, bits_per_mode=BITS_PER_MODE))
 
-        linear_params = [tfc_params[int(idx)] for idx in linear_scan]
+        linear_params = [tfc_params[int(idx)] for idx in linear_scan] + [
+            raw_predictors[int(idx)] for idx in raw_scan
+        ]
         max_abs_b = max((abs(float(p.get("b", 0.0))) for p in linear_params), default=0.0)
         b_scale = 1.0 if max_abs_b == 0.0 else max_abs_b / 32767.0
+        raw_abs = float(np.max(np.abs(raw_residuals.astype(np.float32)))) if raw_residuals.size else 0.0
+        raw_scale = 1.0 if raw_abs == 0.0 else raw_abs / 32767.0
 
         buf.write(
             struct.pack(
-                "<III f III",
+                "<IIIffIII",
                 seg_len,
                 logical_count,
                 len(mode_rle),
                 float(b_scale),
+                float(raw_scale),
                 int(const_scan.size),
                 int(linear_scan.size),
                 int(raw_scan.size),
@@ -585,12 +591,47 @@ def build_plane_payload_v3(
 
         if raw_scan.size:
             expected_shape = (int(raw_scan.size), seg_len)
-            raw_values = np.asarray(raw_values, dtype=np.uint8)
-            if raw_values.shape != expected_shape:
+            if raw_residuals.shape != expected_shape:
                 raise ValueError(
-                    f"v3 raw_values shape mismatch: expected {expected_shape}, got {raw_values.shape}"
+                    "v3 raw_residuals shape mismatch: "
+                    f"expected {expected_shape}, got {raw_residuals.shape}"
                 )
-            buf.write(raw_values.tobytes())
+            raw_a = np.array(
+                [
+                    np.uint8(
+                        np.clip(round(float(raw_predictors[int(idx)]["a"])), 0, 255)
+                    )
+                    for idx in raw_scan
+                ],
+                dtype=np.uint8,
+            )
+            if b_scale == 0.0:
+                raw_b = np.zeros((raw_scan.size,), dtype=np.int16)
+            else:
+                raw_b = np.array(
+                    [
+                        int(
+                            np.clip(
+                                round(float(raw_predictors[int(idx)].get("b", 0.0)) / b_scale),
+                                -32768,
+                                32767,
+                            )
+                        )
+                        for idx in raw_scan
+                    ],
+                    dtype=np.int16,
+                )
+            if raw_scale == 0.0:
+                raw_q = np.zeros(expected_shape, dtype=np.int16)
+            else:
+                raw_q = np.clip(
+                    np.rint(raw_residuals.astype(np.float32) / raw_scale),
+                    -32767,
+                    32767,
+                ).astype(np.int16)
+            buf.write(raw_a.tobytes())
+            buf.write(raw_b.tobytes())
+            buf.write(raw_q.tobytes())
 
     return _compress_payload(buf.getvalue(), payload_comp_type)
 
@@ -605,11 +646,11 @@ def parse_plane_payload_v3(comp_payload: bytes, payload_comp_type: int):
     seg_count = struct.unpack("<I", seg_count_raw)[0]
     segments = []
     for _ in range(seg_count):
-        seg_hdr = bio.read(28)
-        if len(seg_hdr) != 28:
+        seg_hdr = bio.read(32)
+        if len(seg_hdr) != 32:
             raise ValueError("Incomplete v3 segment header")
-        seg_len, logical_count, mode_len, b_scale, const_count, linear_count, raw_count = struct.unpack(
-            "<III f III", seg_hdr
+        seg_len, logical_count, mode_len, b_scale, raw_scale, const_count, linear_count, raw_count = struct.unpack(
+            "<IIIffIII", seg_hdr
         )
         mode_rle = bio.read(mode_len)
         if len(mode_rle) != mode_len:
@@ -652,12 +693,29 @@ def parse_plane_payload_v3(comp_payload: bytes, payload_comp_type: int):
                     "b": float(b_q) * float(b_scale),
                 }
 
-        raw_values = np.empty((0, seg_len), dtype=np.uint8)
+        raw_predictors: Dict[int, Dict[str, float]] = {}
+        raw_residuals = np.empty((0, seg_len), dtype=np.float32)
         if raw_count:
-            raw_raw = bio.read(raw_count * seg_len)
-            if len(raw_raw) != raw_count * seg_len:
+            raw_a_raw = bio.read(raw_count)
+            raw_b_raw = bio.read(2 * raw_count)
+            raw_q_raw = bio.read(2 * raw_count * seg_len)
+            if (
+                len(raw_a_raw) != raw_count
+                or len(raw_b_raw) != 2 * raw_count
+                or len(raw_q_raw) != 2 * raw_count * seg_len
+            ):
                 raise ValueError("Incomplete v3 raw stream")
-            raw_values = np.frombuffer(raw_raw, dtype=np.uint8).reshape(raw_count, seg_len).copy()
+            raw_a = np.frombuffer(raw_a_raw, dtype=np.uint8)
+            raw_b = np.frombuffer(raw_b_raw, dtype=np.int16)
+            raw_q = np.frombuffer(raw_q_raw, dtype=np.int16).reshape(raw_count, seg_len)
+            raw_residuals = raw_q.astype(np.float32) * float(raw_scale)
+            for logical_idx, a_q, b_q in zip(
+                raw_scan.tolist(), raw_a.tolist(), raw_b.tolist()
+            ):
+                raw_predictors[int(logical_idx)] = {
+                    "a": float(a_q),
+                    "b": float(b_q) * float(b_scale),
+                }
 
         segments.append(
             {
@@ -665,7 +723,8 @@ def parse_plane_payload_v3(comp_payload: bytes, payload_comp_type: int):
                 "logical_count": int(logical_count),
                 "modes": modes,
                 "tfc_params": tfc_params,
-                "raw_values": raw_values,
+                "raw_predictors": raw_predictors,
+                "raw_residuals": raw_residuals,
             }
         )
     return segments

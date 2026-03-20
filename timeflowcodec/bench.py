@@ -128,6 +128,7 @@ def bench_tfc(
         tau=tau,
         slope_threshold=slope,
         payload_comp_type=payload_comp_type,
+        container_version=3,
         preset=preset,
     )
     enc_time = time.perf_counter() - start
@@ -246,8 +247,12 @@ def write_results(out_dir: Path, results: list[BenchResult], env: dict, missing:
     lines = []
     lines.append("# TimeFlowCodec Benchmark Report\n")
     lines.append(f"Env: {env}\n")
+    lines.append(
+        "TFC defaults used here: container `v3`, preset-driven colorspace, and structured zstd payloads.\n"
+    )
     if missing:
         lines.append(f"Missing codecs: {', '.join(missing)}\n")
+    lines.append("## Scoreboard\n")
     lines.append("| codec | preset | crf | clip | size (bytes) | enc time (s) | dec time (s) | psnr | ssim |")
     lines.append("|---|---|---|---|---|---|---|---|---|")
     for r in results:

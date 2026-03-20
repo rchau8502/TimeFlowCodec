@@ -323,7 +323,10 @@ def decode_tfc_to_video(
                         raise ValueError("v3 logical mode count does not match plane tile grid")
                     values = np.zeros((logical_count,), dtype=np.float32)
                     raw_scan = np.nonzero(modes == MODE_FB_RAW)[0]
-                    raw_values = np.asarray(seg.get("raw_values", []), dtype=np.uint8)
+                    raw_predictors = seg.get("raw_predictors", {})
+                    raw_residuals = np.asarray(
+                        seg.get("raw_residuals", []), dtype=np.float32
+                    )
                     raw_lookup = {
                         int(idx): row for row, idx in enumerate(raw_scan.tolist())
                     } if raw_scan.size else {}
@@ -333,7 +336,13 @@ def decode_tfc_to_video(
                         elif param["mode"] == MODE_TFC_LINEAR:
                             values[int(logical_idx)] = float(param["a"]) + float(param.get("b", 0.0)) * float(t)
                     for logical_idx in raw_scan.tolist():
-                        values[int(logical_idx)] = float(raw_values[raw_lookup[int(logical_idx)], t])
+                        predictor = raw_predictors[int(logical_idx)]
+                        row = raw_lookup[int(logical_idx)]
+                        values[int(logical_idx)] = (
+                            float(predictor["a"])
+                            + float(predictor.get("b", 0.0)) * float(t)
+                            + float(raw_residuals[row, t])
+                        )
                     plane_img = expand_tile_values(values, ph, pw, tile_size)
                     reconstructed_planes.append(
                         np.clip(np.rint(plane_img), 0, 255).astype(np.uint8)

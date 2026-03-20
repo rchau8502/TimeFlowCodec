@@ -49,7 +49,7 @@ def test_preset_anime_defaults_upgrade_compression_and_tools():
     assert container_version == VERSION_V3
     assert color_format == COLOR_FORMAT_YUV420
     assert payload_comp_type == COMP_ZSTD
-    assert tiling == 16
+    assert tiling == 8
     assert max_ram_mb == 2500
     assert scene_cut == "auto"
     assert matrix_mode is False
@@ -73,6 +73,7 @@ def test_preset_lownoise_defaults_choose_yuv444():
     )
     assert out[0] == VERSION_V3
     assert out[1] == COLOR_FORMAT_YUV444
+    assert out[5] == 8
 
 
 @pytest.mark.skipif(

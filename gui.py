@@ -51,20 +51,20 @@ def _suggest_output_path(input_path: str, suffix: str) -> str:
 def _preset_ui_defaults(preset: str) -> dict[str, float | int | bool | str]:
     if preset == "anime":
         return {
-            "tau": 0.06,
-            "slope_threshold": 0.0015,
+            "tau": 0.035,
+            "slope_threshold": 0.0012,
             "scene_cut": "auto",
-            "scene_threshold": 0.27,
+            "scene_threshold": 0.22,
             "matrix_mode": False,
             "compression_index": 3,
             "colorspace_index": 2,
         }
     if preset == "lownoise":
         return {
-            "tau": 0.08,
-            "slope_threshold": 0.0015,
+            "tau": 0.05,
+            "slope_threshold": 0.0012,
             "scene_cut": "auto",
-            "scene_threshold": 0.32,
+            "scene_threshold": 0.24,
             "matrix_mode": False,
             "compression_index": 3,
             "colorspace_index": 1,
