@@ -1,0 +1,85 @@
+160x96 encode
+         813105 function calls (812766 primitive calls) in 7.457 seconds
+
+   Ordered by: cumulative time
+   List reduced from 456 to 12 due to restriction <12>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.016    0.016    7.457    7.457 <stdin>:15(<lambda>)
+        1    0.003    0.003    7.441    7.441 encoder.py:313(encode_video_to_tfc)
+        3    1.133    0.378    5.603    1.868 format.py:520(build_plane_payload_v3)
+    46482    0.277    0.000    4.245    0.000 fromnumeric.py:2241(clip)
+    46648    0.550    0.000    3.971    0.000 fromnumeric.py:51(_wrapfunc)
+    46441    0.411    0.000    3.379    0.000 fromnumeric.py:41(_wrapit)
+    46482    0.146    0.000    2.789    0.000 {method 'clip' of 'numpy.ndarray' objects}
+    46482    1.549    0.000    2.643    0.000 _methods.py:98(_clip)
+       28    0.067    0.002    2.267    0.081 _io.py:190(read_frames)
+       26    0.004    0.000    1.743    0.067 format.py:482(iter_data)
+       26    0.001    0.000    1.734    0.067 ffmpeg.py:396(_get_data)
+       26    0.072    0.003    1.730    0.067 ffmpeg.py:510(_read_frame)
+
+
+
+160x96 decode
+         6251 function calls in 1.838 seconds
+
+   Ordered by: cumulative time
+   List reduced from 53 to 12 due to restriction <12>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.040    0.040    1.838    1.838 <stdin>:15(<lambda>)
+        1    0.000    0.000    1.799    1.799 decoder.py:57(decode_tfc_to_video)
+        1    1.451    1.451    1.665    1.665 decoder.py:336(reconstruct_segment)
+      153    0.001    0.000    0.176    0.001 fromnumeric.py:51(_wrapfunc)
+       36    0.001    0.000    0.157    0.004 fromnumeric.py:2241(clip)
+       36    0.000    0.000    0.155    0.004 {method 'clip' of 'numpy.ndarray' objects}
+       36    0.155    0.004    0.155    0.004 _methods.py:98(_clip)
+        3    0.097    0.032    0.133    0.044 format.py:641(parse_plane_payload_v3)
+       36    0.002    0.000    0.026    0.001 utils.py:146(expand_tile_values)
+       72    0.005    0.000    0.023    0.000 fromnumeric.py:462(repeat)
+        3    0.020    0.007    0.020    0.007 format.py:56(unpack_modes)
+       72    0.017    0.000    0.017    0.000 {method 'repeat' of 'numpy.ndarray' objects}
+
+
+
+320x192 encode
+         3161039 function calls (3160763 primitive calls) in 7.508 seconds
+
+   Ordered by: cumulative time
+   List reduced from 416 to 12 due to restriction <12>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.029    0.029    7.508    7.508 <stdin>:15(<lambda>)
+        1    0.055    0.055    7.479    7.479 encoder.py:313(encode_video_to_tfc)
+        3    0.750    0.250    4.638    1.546 format.py:520(build_plane_payload_v3)
+   184722    0.488    0.000    3.691    0.000 fromnumeric.py:2241(clip)
+   184888    0.286    0.000    3.209    0.000 fromnumeric.py:51(_wrapfunc)
+   184681    0.395    0.000    2.879    0.000 fromnumeric.py:41(_wrapit)
+   184722    0.118    0.000    2.271    0.000 {method 'clip' of 'numpy.ndarray' objects}
+   184722    1.557    0.000    2.153    0.000 _methods.py:98(_clip)
+  290/252    0.276    0.001    1.173    0.005 {method 'read' of '_io.BufferedReader' objects}
+        2    0.000    0.000    1.087    0.543 threading.py:1000(_bootstrap)
+        2    0.000    0.000    1.084    0.542 threading.py:1027(_bootstrap_inner)
+        2    0.000    0.000    1.083    0.542 _parsing.py:51(run)
+
+
+
+320x192 decode
+         6251 function calls in 1.281 seconds
+
+   Ordered by: cumulative time
+   List reduced from 53 to 12 due to restriction <12>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.020    0.020    1.281    1.281 <stdin>:15(<lambda>)
+        1    0.001    0.001    1.261    1.261 decoder.py:57(decode_tfc_to_video)
+        1    1.096    1.096    1.127    1.127 decoder.py:336(reconstruct_segment)
+        3    0.087    0.029    0.132    0.044 format.py:641(parse_plane_payload_v3)
+        3    0.038    0.013    0.038    0.013 format.py:56(unpack_modes)
+      153    0.001    0.000    0.018    0.000 fromnumeric.py:51(_wrapfunc)
+       36    0.002    0.000    0.014    0.000 utils.py:146(expand_tile_values)
+       72    0.000    0.000    0.011    0.000 fromnumeric.py:462(repeat)
+       72    0.011    0.000    0.011    0.000 {method 'repeat' of 'numpy.ndarray' objects}
+       87    0.007    0.000    0.007    0.000 {method 'tolist' of 'numpy.ndarray' objects}
+       36    0.000    0.000    0.006    0.000 fromnumeric.py:2241(clip)
+       36    0.000    0.000    0.005    0.000 {method 'clip' of 'numpy.ndarray' objects}

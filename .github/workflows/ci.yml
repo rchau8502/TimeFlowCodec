@@ -30,8 +30,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e .[bench]
-          pip install ruff pytest
+          pip install -e ".[bench,gui,dev]"
       - name: Lint
         run: ruff check .
       - name: Unit tests
@@ -45,7 +44,7 @@ jobs:
         run: |
           mkdir -p /tmp/tfc_clips
           ffmpeg -y -f lavfi -i testsrc=size=320x240:rate=10 -t 2 /tmp/tfc_clips/gradient.mp4
-          ffmpeg -y -f lavfi -i noise=alls=20:allf=t+u:size=320x240:rate=10 -t 2 /tmp/tfc_clips/noise.mp4
+          ffmpeg -y -f lavfi -i testsrc=size=320x240:rate=10 -vf noise=alls=20:allf=t+u -t 2 /tmp/tfc_clips/noise.mp4
       - name: Smoke benchmark
         run: |
           python -m timeflowcodec.bench --clips /tmp/tfc_clips --out /tmp/tfc_out --codecs tfc --presets medium --crf 23

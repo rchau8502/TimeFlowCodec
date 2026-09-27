@@ -183,9 +183,11 @@ def save_video_from_rgb(frames: np.ndarray, path: str, fps: int = 30) -> None:
     if frames.ndim != 4 or frames.shape[-1] != 3:
         raise ValueError("frames must have shape (T, H, W, 3)")
     writer = imageio.get_writer(path, fps=fps)
-    for frame in frames:
-        writer.append_data(frame)
-    writer.close()
+    try:
+        for frame in frames:
+            writer.append_data(frame)
+    finally:
+        writer.close()
 
 
 def mse(a: np.ndarray, b: np.ndarray) -> float:
@@ -194,3 +196,12 @@ def mse(a: np.ndarray, b: np.ndarray) -> float:
         raise ValueError(f"Shape mismatch: {a.shape} vs {b.shape}")
     diff = a.astype(np.float64) - b.astype(np.float64)
     return float(np.mean(diff * diff))
+
+
+def motion_reference(grid: np.ndarray, codes: np.ndarray) -> np.ndarray:
+    """Sample the first-frame tile grid using signed, edge-clamped v4 offsets."""
+    signed = np.asarray(codes, dtype=np.int16)
+    height, width = grid.shape
+    rows = np.clip(np.arange(height)[:, None] + signed // 3 - 1, 0, height - 1)
+    cols = np.clip(np.arange(width)[None, :] + signed % 3 - 1, 0, width - 1)
+    return grid[rows, cols]

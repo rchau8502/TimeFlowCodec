@@ -9,7 +9,9 @@ __version__ = "0.2.0"
 
 def _run_git(args: list[str]) -> str | None:
     try:
-        proc = subprocess.run(["git", *args], cwd=Path(__file__).resolve().parent, capture_output=True, text=True)
+        proc = subprocess.run(
+            ["git", *args], cwd=Path(__file__).resolve().parent, capture_output=True, text=True, timeout=2
+        )
         if proc.returncode == 0:
             return proc.stdout.strip()
     except Exception:

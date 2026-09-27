@@ -1,0 +1,34 @@
+[
+  {
+    "width": 160,
+    "height": 96,
+    "frames": 12,
+    "phase": "encode",
+    "profiled_seconds": 7.457410125003662,
+    "process_lifetime_peak_rss_bytes": 63553536
+  },
+  {
+    "width": 160,
+    "height": 96,
+    "frames": 12,
+    "phase": "decode",
+    "profiled_seconds": 1.8777871250058524,
+    "process_lifetime_peak_rss_bytes": 63930368
+  },
+  {
+    "width": 320,
+    "height": 192,
+    "frames": 12,
+    "phase": "encode",
+    "profiled_seconds": 7.508798499999102,
+    "process_lifetime_peak_rss_bytes": 129662976
+  },
+  {
+    "width": 320,
+    "height": 192,
+    "frames": 12,
+    "phase": "decode",
+    "profiled_seconds": 1.2810943750082515,
+    "process_lifetime_peak_rss_bytes": 135282688
+  }
+]

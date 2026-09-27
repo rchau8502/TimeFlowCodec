@@ -6,7 +6,7 @@ import platform
 
 from PyInstaller.utils.hooks import collect_all
 
-datas = []
+datas = [("demo_assets/demo_input.mp4", "demo_assets"), ("demo_assets/demo_input.tfc", "demo_assets")]
 binaries = []
 hiddenimports = []
 
@@ -24,9 +24,21 @@ info_plist = {
     "CFBundleDisplayName": "TimeFlowCodec",
     "CFBundleName": "TimeFlowCodec",
     "CFBundleShortVersionString": "0.2.0",
-    "CFBundleVersion": "0.2.0",
-    "LSMinimumSystemVersion": "12.0",
+    "CFBundleVersion": "0.2.1",
+    "LSMinimumSystemVersion": "13.0",
     "NSHighResolutionCapable": True,
+    "CFBundleDocumentTypes": [{
+        "CFBundleTypeName": "TimeFlowCodec video",
+        "CFBundleTypeRole": "Viewer",
+        "LSHandlerRank": "Alternate",
+        "LSItemContentTypes": ["com.timeflowcodec.video"],
+    }],
+    "UTExportedTypeDeclarations": [{
+        "UTTypeIdentifier": "com.timeflowcodec.video",
+        "UTTypeDescription": "TimeFlowCodec video",
+        "UTTypeConformsTo": ["public.data"],
+        "UTTypeTagSpecification": {"public.filename-extension": ["tfc"]},
+    }],
 }
 
 a = Analysis(
@@ -34,7 +46,7 @@ a = Analysis(
     pathex=['.'],
     binaries=binaries,
     datas=datas,
-    hiddenimports=['timeflowcodec'] + hiddenimports,
+    hiddenimports=['timeflowcodec', 'timeflowcodec.player_decode'] + hiddenimports,
     hookspath=[],
     runtime_hooks=[],
     excludes=['PyQt5', 'PyQt6', 'PySide2'],
@@ -47,10 +59,8 @@ pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
     [],
+    exclude_binaries=True,
     name='TimeFlowCodec',
     debug=False,
     bootloader_ignore_signals=False,
@@ -61,13 +71,23 @@ exe = EXE(
     console=False,
 )
 
-app = BUNDLE(
+collection = COLLECT(
     exe,
-    name='TimeFlowCodec.app',
-    icon=None,
-    bundle_identifier='com.timeflowcodec.gui',
-    info_plist=info_plist,
-    manifest=None,
-    resources=[],
-    target_arch=target_arch,
+    a.binaries,
+    a.datas,
+    strip=False,
+    upx=True,
+    name='TimeFlowCodec',
 )
+
+if platform.system() == "Darwin":
+    app = BUNDLE(
+        collection,
+        name='TimeFlowCodec.app',
+        icon=None,
+        bundle_identifier='com.timeflowcodec.gui',
+        info_plist=info_plist,
+        manifest=None,
+        resources=[],
+        target_arch=target_arch,
+    )

@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import argparse
 import platform
 import sys
+import tempfile
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QThread, Signal
@@ -18,10 +20,12 @@ from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
+    QLayout,
     QLineEdit,
     QMainWindow,
     QProgressBar,
     QPushButton,
+    QScrollArea,
     QSizePolicy,
     QSpinBox,
     QTabWidget,
@@ -31,11 +35,10 @@ from PySide6.QtWidgets import (
 )
 
 from timeflowcodec import decode_tfc_to_video, encode_video_to_tfc, get_version_string
+from timeflowcodec.jobs import JobCancelled
 
 
-def _is_apple_silicon(
-    system_name: str | None = None, machine_name: str | None = None
-) -> bool:
+def _is_apple_silicon(system_name: str | None = None, machine_name: str | None = None) -> bool:
     system_name = system_name or platform.system()
     machine_name = (machine_name or platform.machine()).lower()
     return system_name == "Darwin" and machine_name in {"arm64", "aarch64"}
@@ -49,6 +52,16 @@ def _suggest_output_path(input_path: str, suffix: str) -> str:
 
 
 def _preset_ui_defaults(preset: str) -> dict[str, float | int | bool | str]:
+    if preset == "screen":
+        return {
+            "tau": 0.0001,
+            "slope_threshold": 0.001,
+            "scene_cut": "auto",
+            "scene_threshold": 0.35,
+            "matrix_mode": False,
+            "compression_index": 3,
+            "colorspace_index": 0,
+        }
     if preset == "anime":
         return {
             "tau": 0.035,
@@ -92,13 +105,32 @@ def _compression_mode_label(
     matrix_name = "matrix on" if matrix_mode else "matrix off"
     return (
         f"{preset} preset, {colorspace}, {compression_name}, {platform_name}, {matrix_name}. "
-        "Optimized for bounded-memory desktop use."
+        "Memory use depends on clip size."
     )
 
 
 def _demo_asset(name: str) -> str:
     path = Path(__file__).resolve().parent / "demo_assets" / name
     return str(path) if path.exists() else ""
+
+
+def inspect_video(path):
+    """Read a single frame for inexpensive source inspection."""
+    import imageio.v2 as imageio
+
+    reader = imageio.get_reader(path)
+    try:
+        metadata = reader.get_meta_data()
+        frame = reader.get_data(0)
+        return {
+            "width": frame.shape[1],
+            "height": frame.shape[0],
+            "bytes": Path(path).stat().st_size,
+            "fps": metadata.get("fps"),
+            "duration": metadata.get("duration"),
+        }
+    finally:
+        reader.close()
 
 
 class FileDropLineEdit(QLineEdit):
@@ -132,6 +164,7 @@ class CodecWorker(QThread):
     message = Signal(str)
     finished_success = Signal(str)
     failed = Signal(str)
+    cancelled = Signal(str)
 
     def __init__(self, func, *args, **kwargs):
         super().__init__()
@@ -139,12 +172,22 @@ class CodecWorker(QThread):
         self.args = args
         self.kwargs = kwargs
 
+    def _progress(self, phase, completed, total):
+        self.message.emit(f"{phase}: {completed}/{total}" if total else f"{phase}: {completed}")
+        self.progress.emit(min(99, int(100 * completed / total)) if total else -1)
+
     def run(self):
         try:
             self.message.emit("Running codec job")
-            self.func(*self.args, **self.kwargs)
+            self.func(
+                *self.args, **self.kwargs, cancel_check=self.isInterruptionRequested, progress_callback=self._progress
+            )
+            if self.isInterruptionRequested():
+                raise JobCancelled("Job cancelled")
             self.progress.emit(100)
             self.finished_success.emit("Done")
+        except JobCancelled as exc:
+            self.cancelled.emit(str(exc))
         except Exception as exc:  # noqa: BLE001
             self.failed.emit(str(exc))
 
@@ -152,11 +195,14 @@ class CodecWorker(QThread):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
+        self._close_when_idle = False
+        self._demo_temp = None
+        self._last_encoded_path = None
         self.apple_silicon = _is_apple_silicon()
         self.encode_worker: CodecWorker | None = None
         self.decode_worker: CodecWorker | None = None
 
-        self.setWindowTitle("TimeFlowCodec")
+        self.setWindowTitle("TimeFlowCodec — Desktop preview 2")
         self.resize(1100, 760)
         self.setMinimumSize(960, 680)
         self._apply_style()
@@ -168,12 +214,58 @@ class MainWindow(QMainWindow):
 
         root_layout.addWidget(self._build_header())
 
+        from timeflowcodec.player import PlayerWindow
+
         self.tabs = QTabWidget()
-        self.tabs.addTab(self._build_compress_tab(), "Compress")
-        self.tabs.addTab(self._build_decompress_tab(), "Decompress")
+        self.player_window = PlayerWindow(demo_path=_demo_asset("demo_input.tfc"))
+        self.player_window.setWindowFlags(Qt.Widget)
+        self.tabs.addTab(self.player_window, "Play")
+        self.tabs.addTab(self._scroll_page(self._build_compress_tab()), "Compress")
+        self.tabs.addTab(self._scroll_page(self._build_decompress_tab()), "Decompress")
         root_layout.addWidget(self.tabs, 1)
 
         self.setCentralWidget(root)
+        self.file_menu = self.menuBar().addMenu("File")
+        self.play_action = self.file_menu.addAction("Open .tfc for playback…")
+        self.play_action.setShortcut("Ctrl+O")
+        self.play_action.triggered.connect(lambda _checked: self.open_player())
+
+    @staticmethod
+    def _scroll_page(page):
+        page.layout().setSizeConstraint(QLayout.SetMinAndMaxSize)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setWidget(page)
+        return scroll
+
+    def open_player(self, path=None):
+        self.show()
+        self.raise_()
+        self.activateWindow()
+        self.tabs.setCurrentWidget(self.player_window)
+        if path:
+            self.player_window.open_file(path)
+        else:
+            self.player_window.choose_file()
+
+    def closeEvent(self, event):  # noqa: N802
+        if self.encode_worker is not None or self.decode_worker is not None:
+            self._close_when_idle = True
+            label = self.compress_status if self.encode_worker is not None else self.decompress_status
+            label.setText("Cancelling the current job before closing…")
+            for worker in (self.encode_worker, self.decode_worker):
+                if worker is not None:
+                    worker.requestInterruption()
+            event.ignore()
+            return
+        if self.player_window is not None and not self.player_window.close():
+            event.ignore()
+            return
+        if self._demo_temp is not None:
+            self._demo_temp.cleanup()
+            self._demo_temp = None
+        super().closeEvent(event)
 
     def _apply_style(self) -> None:
         QApplication.setStyle("Fusion")
@@ -226,6 +318,10 @@ class MainWindow(QMainWindow):
                 color: #eef3f7;
                 font-weight: 600;
             }
+            QPushButton:disabled {
+                color: #68798b;
+                background: #17212b;
+            }
             QPushButton:hover {
                 background: #28384a;
             }
@@ -265,7 +361,7 @@ class MainWindow(QMainWindow):
                 background: #12b8b1;
             }
             QLabel#heroTitle {
-                font-size: 30px;
+                font-size: 24px;
                 font-weight: 800;
                 color: #f5fbff;
             }
@@ -314,19 +410,18 @@ class MainWindow(QMainWindow):
     def _build_header(self) -> QWidget:
         card = self._make_card()
         layout = QVBoxLayout(card)
-        layout.setContentsMargins(24, 22, 24, 22)
+        layout.setContentsMargins(18, 12, 18, 12)
         layout.setSpacing(14)
 
         title = QLabel("TimeFlowCodec")
         title.setObjectName("heroTitle")
-        subtitle = QLabel(
-            "Per-pixel temporal compression with presets for anime, UI capture, and low-noise footage."
-        )
+        subtitle = QLabel("Per-pixel temporal compression with presets for anime, UI capture, and low-noise footage.")
         subtitle.setWordWrap(True)
         subtitle.setObjectName("heroSub")
 
         badges = QHBoxLayout()
         badges.setSpacing(10)
+        badges.addWidget(self._make_badge("Desktop preview 2"))
         badges.addWidget(self._make_badge(get_version_string()))
         if self.apple_silicon:
             badges.addWidget(self._make_badge("Apple Silicon detected"))
@@ -365,12 +460,8 @@ class MainWindow(QMainWindow):
         self.in_video_edit.textChanged.connect(self._autofill_compress_output)
         self.in_video_edit.fileDropped.connect(self._autofill_compress_output)
 
-        io_layout.addRow(
-            "Input video", self._build_path_row(self.in_video_edit, self._browse_input_video)
-        )
-        io_layout.addRow(
-            "Output .tfc", self._build_path_row(self.out_tfc_edit, self._browse_output_tfc)
-        )
+        io_layout.addRow("Input video", self._build_path_row(self.in_video_edit, self._browse_input_video))
+        io_layout.addRow("Output .tfc", self._build_path_row(self.out_tfc_edit, self._browse_output_tfc))
 
         demo_row = QHBoxLayout()
         demo_row.setSpacing(10)
@@ -394,7 +485,7 @@ class MainWindow(QMainWindow):
         profile_layout.setSpacing(14)
 
         self.preset_combo = QComboBox()
-        self.preset_combo.addItems(["anime", "lownoise", "custom"])
+        self.preset_combo.addItems(["anime", "screen", "lownoise", "custom"])
         self.preset_combo.currentTextChanged.connect(self._on_preset_changed)
 
         self.comp_combo = QComboBox()
@@ -440,7 +531,7 @@ class MainWindow(QMainWindow):
         summary_strip = QHBoxLayout()
         summary_strip.setSpacing(8)
         self.speed_badge = self._make_badge("Fast decode")
-        self.memory_badge = self._make_badge("Bounded RAM")
+        self.memory_badge = self._make_badge("Soft RAM limit")
         self.preset_badge = self._make_badge("Anime tuned")
         summary_strip.addWidget(self.speed_badge)
         summary_strip.addWidget(self.memory_badge)
@@ -514,6 +605,7 @@ class MainWindow(QMainWindow):
         self.compress_status.setWordWrap(True)
 
         self.compress_progress = QProgressBar()
+        self.compress_progress.setTextVisible(False)
         self.compress_progress.setRange(0, 100)
         self.compress_progress.setValue(0)
 
@@ -521,7 +613,17 @@ class MainWindow(QMainWindow):
         self.compress_start_btn.setObjectName("primaryButton")
         self.compress_start_btn.clicked.connect(self._start_compress)
 
-        action_layout.addWidget(self.compress_start_btn)
+        self.play_result_btn = QPushButton("Play result")
+        self.play_result_btn.setEnabled(False)
+        self.play_result_btn.clicked.connect(lambda: self.open_player(self._last_encoded_path))
+        action_buttons = QHBoxLayout()
+        action_buttons.addWidget(self.compress_start_btn, 1)
+        action_buttons.addWidget(self.play_result_btn)
+        self.compress_cancel_btn = QPushButton("Cancel")
+        self.compress_cancel_btn.setEnabled(False)
+        self.compress_cancel_btn.clicked.connect(lambda: self._cancel_job(True))
+        action_buttons.addWidget(self.compress_cancel_btn)
+        action_layout.addLayout(action_buttons)
         action_layout.addWidget(self.compress_progress)
         action_layout.addWidget(self.compress_status)
         layout.addWidget(action_card)
@@ -543,7 +645,7 @@ class MainWindow(QMainWindow):
             self._make_info_strip(
                 "Decompression",
                 "Decompression streams frames directly to the output video by "
-                "default so large files stay reasonable on laptops.",
+                "default; large segments can still require substantial RAM.",
             )
         )
 
@@ -557,9 +659,7 @@ class MainWindow(QMainWindow):
         self.in_tfc_edit.textChanged.connect(self._autofill_decompress_output)
         self.in_tfc_edit.fileDropped.connect(self._autofill_decompress_output)
 
-        io_layout.addRow(
-            "Input .tfc", self._build_path_row(self.in_tfc_edit, self._browse_input_tfc)
-        )
+        io_layout.addRow("Input .tfc", self._build_path_row(self.in_tfc_edit, self._browse_input_tfc))
         io_layout.addRow(
             "Output video",
             self._build_path_row(self.out_video_edit, self._browse_output_video),
@@ -584,8 +684,9 @@ class MainWindow(QMainWindow):
         settings_layout.setSpacing(14)
 
         self.fps_spin = QSpinBox()
-        self.fps_spin.setRange(1, 240)
-        self.fps_spin.setValue(30)
+        self.fps_spin.setRange(0, 240)
+        self.fps_spin.setSpecialValueText("Source (legacy: 30)")
+        self.fps_spin.setValue(0)
 
         self.stream_output_checkbox = QCheckBox("Stream decoded frames to disk")
         self.stream_output_checkbox.setChecked(True)
@@ -617,6 +718,7 @@ class MainWindow(QMainWindow):
         self.decompress_status.setWordWrap(True)
 
         self.decompress_progress = QProgressBar()
+        self.decompress_progress.setTextVisible(False)
         self.decompress_progress.setRange(0, 100)
         self.decompress_progress.setValue(0)
 
@@ -625,6 +727,10 @@ class MainWindow(QMainWindow):
         self.decompress_start_btn.clicked.connect(self._start_decompress)
 
         action_layout.addWidget(self.decompress_start_btn)
+        self.decompress_cancel_btn = QPushButton("Cancel")
+        self.decompress_cancel_btn.setEnabled(False)
+        self.decompress_cancel_btn.clicked.connect(lambda: self._cancel_job(False))
+        action_layout.addWidget(self.decompress_cancel_btn)
         action_layout.addWidget(self.decompress_progress)
         action_layout.addWidget(self.decompress_status)
         layout.addWidget(action_card)
@@ -689,9 +795,7 @@ class MainWindow(QMainWindow):
             self.out_tfc_edit.setText(path)
 
     def _browse_input_tfc(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(
-            self, "Select .tfc file", str(Path.home()), "TFC Files (*.tfc)"
-        )
+        path, _ = QFileDialog.getOpenFileName(self, "Select .tfc file", str(Path.home()), "TFC Files (*.tfc)")
         if path:
             self.in_tfc_edit.setText(path)
 
@@ -705,15 +809,26 @@ class MainWindow(QMainWindow):
         if path:
             self.out_video_edit.setText(path)
 
+    def _demo_output(self, name):
+        if self._demo_temp is None:
+            self._demo_temp = tempfile.TemporaryDirectory(prefix="timeflow-demo-")
+        return str(Path(self._demo_temp.name) / name)
+
     def _load_demo_video(self) -> None:
         demo = _demo_asset("demo_input.mp4")
         if demo:
+            self.out_tfc_edit.setText(self._demo_output("compressed-demo.tfc"))
             self.in_video_edit.setText(demo)
+            self.player_window.fps.setValue(12)
+            self.compress_status.setText("Demo output is temporary. Choose another destination to keep it.")
 
     def _load_demo_tfc(self) -> None:
         demo = _demo_asset("demo_input.tfc")
         if demo:
+            self.out_video_edit.setText(self._demo_output("restored-demo.mp4"))
             self.in_tfc_edit.setText(demo)
+            self.fps_spin.setValue(12)
+            self.decompress_status.setText("Demo output is temporary. Choose another destination to keep it.")
 
     def _autofill_compress_output(self, input_path: str) -> None:
         if not input_path:
@@ -730,8 +845,8 @@ class MainWindow(QMainWindow):
     def _refresh_platform_status(self) -> None:
         if self.apple_silicon and self.macbook_profile_checkbox.isChecked():
             self.platform_status.setText(
-                "Apple Silicon mode active. The encoder will prefer bounded RAM "
-                "behavior, tile sharing, uint8 internals, and safer scene handling."
+                "Apple Silicon mode active. The encoder uses a soft fallback-buffer "
+                "limit, tile sharing and uint8 internals. Total RAM still depends on the clip."
             )
         elif self.apple_silicon:
             self.platform_status.setText(
@@ -767,13 +882,15 @@ class MainWindow(QMainWindow):
 
         if preset == "anime":
             self.preset_note.setText(
-                "Anime preset now uses the new tile-native v3 path with yuv420, "
-                "zstd, and bounded-memory defaults."
+                "Anime preset now uses the new tile-native v3 path with yuv420, zstd, and lower-memory defaults."
+            )
+        elif preset == "screen":
+            self.preset_note.setText(
+                "Screen preset preserves fine text and colored edges with full-resolution RGB. "
+                "It can use more memory and produce larger files than anime."
             )
         elif preset == "lownoise":
-            self.preset_note.setText(
-                "Low-noise preset uses yuv444 and keeps more chroma detail than anime."
-            )
+            self.preset_note.setText("Low-noise preset uses yuv444 and keeps more chroma detail than anime.")
         else:
             self.preset_note.setText(
                 "Custom preset exposes the raw knobs. Use this only if you know "
@@ -795,24 +912,16 @@ class MainWindow(QMainWindow):
             colorspace=self.colorspace_combo.currentText(),
         )
         tune = (
-            f"tau={self.tau_spin.value():.3f}, slope={self.slope_spin.value():.4f}, "
+            f"tau={self.tau_spin.value():.4f}, slope={self.slope_spin.value():.4f}, "
             f"scene={self.scene_cut_combo.currentText()}"
         )
         self.compress_summary.setText(f"{summary}\nCurrent tuning: {tune}.")
-        self.memory_badge.setText(
-            "Bounded RAM" if self.macbook_profile_checkbox.isChecked() else "Higher RAM"
-        )
-        self.speed_badge.setText(
-            "Tile sharing on"
-            if self.macbook_profile_checkbox.isChecked()
-            else "Manual runtime"
-        )
+        self.memory_badge.setText("Soft RAM limit" if self.macbook_profile_checkbox.isChecked() else "Higher RAM")
+        self.speed_badge.setText("Tile sharing on" if self.macbook_profile_checkbox.isChecked() else "Manual runtime")
 
     def _update_decode_summary(self) -> None:
         if self.stream_output_checkbox.isChecked():
-            self.decode_summary.setText(
-                "Streaming decode is on. Best for large clips and Apple Silicon laptops."
-            )
+            self.decode_summary.setText("Frames write progressively, but compressed data and segments still use RAM.")
         else:
             self.decode_summary.setText(
                 "Streaming decode is off. This is simpler, but it buffers the whole video in memory."
@@ -820,14 +929,15 @@ class MainWindow(QMainWindow):
 
     def _set_busy_state(self, compress: bool, running: bool, status: str) -> None:
         progress = self.compress_progress if compress else self.decompress_progress
-        button = self.compress_start_btn if compress else self.decompress_start_btn
         label = self.compress_status if compress else self.decompress_status
 
         label.setText(status)
         label.setObjectName("statusWarn" if running else "statusGood")
         label.style().unpolish(label)
         label.style().polish(label)
-        button.setEnabled(not running)
+        busy = running or self.encode_worker is not None or self.decode_worker is not None
+        self.compress_start_btn.setEnabled(not busy)
+        self.decompress_start_btn.setEnabled(not busy)
         if running:
             progress.setRange(0, 0)
         else:
@@ -835,6 +945,8 @@ class MainWindow(QMainWindow):
             progress.setValue(100)
 
     def _start_compress(self) -> None:
+        if self.encode_worker is not None or self.decode_worker is not None:
+            return
         input_path = self.in_video_edit.text().strip()
         output_path = self.out_tfc_edit.text().strip()
         if not input_path or not output_path:
@@ -842,7 +954,8 @@ class MainWindow(QMainWindow):
             self.compress_status.setText("Select both input and output paths.")
             return
 
-        self._set_busy_state(True, True, "Compressing with bounded-memory settings…")
+        self.play_result_btn.setEnabled(False)
+        self._set_busy_state(True, True, "Compressing video…")
         self.encode_worker = CodecWorker(
             encode_video_to_tfc,
             input_path,
@@ -850,7 +963,7 @@ class MainWindow(QMainWindow):
             tau=self.tau_spin.value(),
             slope_threshold=self.slope_spin.value(),
             payload_comp_type=self.comp_combo.currentIndex(),
-            container_version=3,
+            container_version=5,
             dtype="uint8",
             colorspace=self.colorspace_combo.currentText(),
             macbook_profile=self.macbook_profile_checkbox.isChecked(),
@@ -861,23 +974,71 @@ class MainWindow(QMainWindow):
         )
         self.encode_worker.finished_success.connect(self._on_compress_done)
         self.encode_worker.failed.connect(self._on_compress_error)
+        self.encode_worker.finished.connect(self._codec_thread_finished)
+        self._connect_job(self.encode_worker, True)
         self.encode_worker.start()
 
+    def _connect_job(self, worker, compress):
+        bar = self.compress_progress if compress else self.decompress_progress
+        label = self.compress_status if compress else self.decompress_status
+        button = self.compress_cancel_btn if compress else self.decompress_cancel_btn
+        button.setEnabled(True)
+        worker.message.connect(label.setText)
+
+        def update(value):
+            bar.setRange(0, 0 if value < 0 else 100)
+            if value >= 0:
+                bar.setValue(value)
+
+        worker.progress.connect(update)
+
+        def cancelled(message):
+            bar.setRange(0, 100)
+            bar.setValue(0)
+            label.setText(message)
+
+        worker.cancelled.connect(cancelled)
+
+    def _cancel_job(self, compress):
+        worker = self.encode_worker if compress else self.decode_worker
+        if worker is not None:
+            worker.requestInterruption()
+            label = self.compress_status if compress else self.decompress_status
+            label.setText("Cancelling…")
+
+    def _codec_thread_finished(self):
+        worker = self.sender()
+        if worker is self.encode_worker:
+            self.encode_worker = None
+        elif worker is self.decode_worker:
+            self.decode_worker = None
+        else:
+            return
+        worker.deleteLater()
+        self.compress_cancel_btn.setEnabled(False)
+        self.decompress_cancel_btn.setEnabled(False)
+        busy = self.encode_worker is not None or self.decode_worker is not None
+        self.compress_start_btn.setEnabled(not busy)
+        self.decompress_start_btn.setEnabled(not busy)
+        if self._close_when_idle and not busy:
+            self.close()
+
     def _on_compress_done(self, _msg: str) -> None:
+        self._last_encoded_path = self.encode_worker.args[1]
+        self.play_result_btn.setEnabled(True)
         self._set_busy_state(True, False, "Compression complete.")
-        self.encode_worker = None
 
     def _on_compress_error(self, err: str) -> None:
         self.compress_progress.setRange(0, 100)
         self.compress_progress.setValue(0)
-        self.compress_start_btn.setEnabled(True)
         self.compress_status.setObjectName("statusBad")
         self.compress_status.setText(f"Compression failed: {err}")
         self.compress_status.style().unpolish(self.compress_status)
         self.compress_status.style().polish(self.compress_status)
-        self.encode_worker = None
 
     def _start_decompress(self) -> None:
+        if self.encode_worker is not None or self.decode_worker is not None:
+            return
         input_path = self.in_tfc_edit.text().strip()
         output_path = self.out_video_edit.text().strip()
         if not input_path or not output_path:
@@ -890,36 +1051,48 @@ class MainWindow(QMainWindow):
             decode_tfc_to_video,
             input_path,
             output_path,
-            self.fps_spin.value(),
-            self.stream_output_checkbox.isChecked(),
+            fps=self.fps_spin.value() or None,
+            stream_output=self.stream_output_checkbox.isChecked(),
         )
         self.decode_worker.finished_success.connect(self._on_decompress_done)
         self.decode_worker.failed.connect(self._on_decompress_error)
+        self.decode_worker.finished.connect(self._codec_thread_finished)
+        self._connect_job(self.decode_worker, False)
         self.decode_worker.start()
 
     def _on_decompress_done(self, _msg: str) -> None:
         self._set_busy_state(False, False, "Decompression complete.")
-        self.decode_worker = None
 
     def _on_decompress_error(self, err: str) -> None:
         self.decompress_progress.setRange(0, 100)
         self.decompress_progress.setValue(0)
-        self.decompress_start_btn.setEnabled(True)
         self.decompress_status.setObjectName("statusBad")
         self.decompress_status.setText(f"Decompression failed: {err}")
         self.decompress_status.style().unpolish(self.decompress_status)
         self.decompress_status.style().polish(self.decompress_status)
-        self.decode_worker = None
 
 
-def main() -> None:
-    app = QApplication(sys.argv)
+def main(argv=None) -> int:
+    args = sys.argv[1:] if argv is None else argv
+    if args[:1] == ["--decode-for-player"]:
+        from timeflowcodec.player_decode import main as decode_main
+
+        return decode_main(args[1:])
+    parser = argparse.ArgumentParser(description="TimeFlowCodec desktop app")
+    parser.add_argument("input", nargs="?", help=".tfc file to open for playback")
+    parsed = parser.parse_args(args)
+    from timeflowcodec.player import FileOpenApplication
+
+    app = FileOpenApplication([sys.argv[0]])
     app.setApplicationName("TimeFlowCodec")
     app.setFont(QFont("SF Pro Text", 13))
     window = MainWindow()
+    app.set_open_handler(window.open_player)
     window.show()
-    sys.exit(app.exec())
+    if parsed.input:
+        window.open_player(parsed.input)
+    return app.exec()
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

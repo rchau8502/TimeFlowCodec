@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -11,7 +13,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import List, Optional
 
-import matplotlib.pyplot as plt
+import imageio_ffmpeg
 import numpy as np
 
 from .constants import COMP_ZSTD
@@ -36,11 +38,13 @@ class BenchResult:
 
 
 def run_cmd(cmd: list[str]) -> subprocess.CompletedProcess:
+    if cmd[0] == "ffmpeg":
+        cmd = [shutil.which("ffmpeg") or imageio_ffmpeg.get_ffmpeg_exe(), *cmd[1:]]
     return subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
 
 def has_ffmpeg_codec(name: str) -> bool:
-    proc = run_cmd(["ffmpeg", "-hide_banner", "-codecs"])
+    proc = run_cmd(["ffmpeg", "-hide_banner", "-encoders"])
     return name in proc.stdout
 
 
@@ -48,59 +52,30 @@ def ensure_dir(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
 
 
-def compute_metrics_ffmpeg(ref: Path, test: Path) -> tuple[Optional[float], Optional[float]]:
-    cmd = [
-        "ffmpeg",
-        "-hide_banner",
-        "-i",
-        str(test),
-        "-i",
-        str(ref),
-        "-lavfi",
-        "[0:v][1:v]psnr;[0:v][1:v]ssim",
-        "-f",
-        "null",
-        "-",
-    ]
-    proc = run_cmd(cmd)
-    psnr = None
-    ssim = None
-    txt = proc.stderr
-    for line in txt.splitlines():
-        if "psnr_avg" in line:
-            try:
-                psnr = float(line.split("psnr_avg:")[-1].split()[0])
-            except ValueError:
-                pass
-        if "All:" in line and "ssim" in line:
-            try:
-                ssim = float(line.split("All:")[-1].split()[0])
-            except ValueError:
-                pass
-    return psnr, ssim
+def compute_metrics_numpy(ref_frames: np.ndarray, test_frames: np.ndarray) -> tuple[float, float]:
+    """RGB PSNR and mean per-frame, per-channel windowed SSIM (uint8 range)."""
+    from skimage.metrics import structural_similarity
 
-
-def compute_metrics_numpy(ref_frames: np.ndarray, test_frames: np.ndarray) -> tuple[Optional[float], Optional[float]]:
-    if ref_frames.shape != test_frames.shape:
-        return None, None
+    if (
+        ref_frames.shape != test_frames.shape
+        or ref_frames.ndim != 4
+        or ref_frames.shape[-1] != 3
+        or not ref_frames.shape[0]
+    ):
+        raise ValueError("Expected matching nonempty (T, H, W, 3) frame shapes")
+    side = min(ref_frames.shape[1:3])
+    if side < 3:
+        raise ValueError("SSIM requires frames at least 3 pixels wide and high")
+    window = min(7, side if side % 2 else side - 1)
     mse = np.mean((ref_frames.astype(np.float64) - test_frames.astype(np.float64)) ** 2)
-    if mse == 0:
-        psnr = float("inf")
-    else:
-        psnr = 10 * math.log10((255.0 * 255.0) / mse)
-    # Simple SSIM proxy: luminance-only, no windowing (rough but deterministic)
-    ref_y = ref_frames.mean(axis=3)
-    test_y = test_frames.mean(axis=3)
-    mu_x = ref_y.mean()
-    mu_y = test_y.mean()
-    sigma_x = ref_y.var()
-    sigma_y = test_y.var()
-    sigma_xy = ((ref_y - mu_x) * (test_y - mu_y)).mean()
-    c1 = (0.01 * 255) ** 2
-    c2 = (0.03 * 255) ** 2
-    denom = (sigma_x + sigma_y + c1) * (sigma_x + sigma_y + c2)
-    ssim = ((2 * mu_x * mu_y + c1) * (2 * sigma_xy + c2)) / denom if denom != 0 else None
-    return psnr, float(ssim) if ssim is not None else None
+    psnr = float("inf") if mse == 0 else 10 * math.log10(255.0**2 / mse)
+    ssim = np.mean(
+        [
+            structural_similarity(ref, test, data_range=255, channel_axis=-1, win_size=window)
+            for ref, test in zip(ref_frames, test_frames)
+        ]
+    )
+    return psnr, float(ssim)
 
 
 def load_frames(path: Path) -> np.ndarray:
@@ -113,19 +88,18 @@ def load_frames(path: Path) -> np.ndarray:
 def bench_tfc(
     clip: Path,
     tmp: Path,
-    tau: float,
+    tau: float | None,
     slope: float,
     payload_comp_type: int,
     preset: str,
 ) -> tuple[Path, BenchResult]:
     out_tfc = tmp / (clip.stem + ".tfc")
-    out_rec = tmp / (clip.stem + "_tfc.mp4")
 
     start = time.perf_counter()
     encode_video_to_tfc(
         str(clip),
         str(out_tfc),
-        tau=tau,
+        **({"tau": tau} if tau is not None else {}),
         slope_threshold=slope,
         payload_comp_type=payload_comp_type,
         container_version=3,
@@ -134,7 +108,7 @@ def bench_tfc(
     enc_time = time.perf_counter() - start
 
     start = time.perf_counter()
-    decode_tfc_to_video(str(out_tfc), str(out_rec))
+    recon = decode_tfc_to_video(str(out_tfc), None)
     dec_time = time.perf_counter() - start
 
     frames = load_video_rgb(str(clip))
@@ -143,10 +117,7 @@ def bench_tfc(
     dec_fps = t / dec_time if dec_time > 0 else 0.0
     size_bytes = out_tfc.stat().st_size
 
-    psnr, ssim = compute_metrics_ffmpeg(clip, out_rec)
-    if psnr is None or ssim is None:
-        recon = load_video_rgb(str(out_rec))
-        psnr, ssim = compute_metrics_numpy(frames, recon)
+    psnr, ssim = compute_metrics_numpy(frames, recon)
 
     res = BenchResult(
         codec="tfc",
@@ -161,7 +132,7 @@ def bench_tfc(
         psnr=psnr,
         ssim=ssim,
     )
-    return out_rec, res
+    return out_tfc, res
 
 
 def bench_ffmpeg(clip: Path, tmp: Path, codec: str, preset: str, crf: str) -> Optional[tuple[Path, BenchResult]]:
@@ -181,18 +152,21 @@ def bench_ffmpeg(clip: Path, tmp: Path, codec: str, preset: str, crf: str) -> Op
         str(clip),
         "-c:v",
         lib,
-        "-preset",
-        preset,
         "-crf",
         crf,
         "-an",
         str(out_vid),
     ]
+    if codec == "av1":
+        speed = ["-cpu-used", {"fast": "6", "medium": "4", "slow": "2"}.get(preset, "4")]
+    else:
+        speed = ["-preset", preset]
+    cmd[-1:-1] = speed
     start = time.perf_counter()
     proc = run_cmd(cmd)
     enc_time = time.perf_counter() - start
     if proc.returncode != 0:
-        return None
+        raise RuntimeError(f"{codec} encode failed: {proc.stderr[-2000:]}")
 
     frames = load_video_rgb(str(clip))
     t, h, w, _ = frames.shape
@@ -204,9 +178,7 @@ def bench_ffmpeg(clip: Path, tmp: Path, codec: str, preset: str, crf: str) -> Op
     dec_time = time.perf_counter() - start
     dec_fps = t / dec_time if dec_time > 0 else 0.0
 
-    psnr, ssim = compute_metrics_ffmpeg(clip, out_vid)
-    if psnr is None or ssim is None:
-        psnr, ssim = compute_metrics_numpy(frames, recon)
+    psnr, ssim = compute_metrics_numpy(frames, recon)
 
     res = BenchResult(
         codec=codec,
@@ -232,6 +204,12 @@ def collect_env() -> dict:
     git = run_cmd(["git", "rev-parse", "HEAD"])
     if git.returncode == 0:
         data["git_commit"] = git.stdout.strip()
+    status = run_cmd(["git", "status", "--porcelain"])
+    data["git_dirty"] = bool(status.stdout.strip()) if status.returncode == 0 else None
+    data["source_sha256"] = {
+        path.name: hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in sorted(Path(__file__).parent.glob("*.py"))
+    }
     ff = run_cmd(["ffmpeg", "-version"])
     if ff.returncode == 0:
         data["ffmpeg"] = ff.stdout.splitlines()[0]
@@ -239,16 +217,31 @@ def collect_env() -> dict:
 
 
 def write_results(out_dir: Path, results: list[BenchResult], env: dict, missing: list[str]) -> None:
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
     ensure_dir(out_dir)
+    records = []
+    for result in results:
+        record = asdict(result)
+        record["lossless_reconstruction"] = result.psnr == float("inf")
+        # JSON has no Infinity literal; the flag distinguishes perfect reconstruction.
+        if record["lossless_reconstruction"]:
+            record["psnr"] = None
+        records.append(record)
     with open(out_dir / "results.json", "w", encoding="utf-8") as f:
-        json.dump({"env": env, "results": [asdict(r) for r in results], "missing": missing}, f, indent=2)
+        json.dump({"env": env, "results": records, "missing": missing}, f, indent=2, allow_nan=False)
 
     # report.md
     lines = []
     lines.append("# TimeFlowCodec Benchmark Report\n")
     lines.append(f"Env: {env}\n")
     lines.append(
-        "TFC defaults used here: container `v3`, preset-driven colorspace, and structured zstd payloads.\n"
+        "Metrics use decoded RGB frames directly: RGB PSNR and mean per-frame windowed RGB SSIM. "
+        "TFC decode timing excludes video export. All metrics buffer short clips in RAM. "
+        "Compare file sizes only at similar measured quality; equal CRF is not equal quality.\n"
     )
     if missing:
         lines.append(f"Missing codecs: {', '.join(missing)}\n")
@@ -312,7 +305,7 @@ def main(argv: Optional[List[str]] = None) -> None:
     parser.add_argument("--codecs", type=str, default="tfc,x264,x265,av1", help="Comma separated codecs")
     parser.add_argument("--presets", type=str, default="medium", help="Comma separated presets for ffmpeg codecs")
     parser.add_argument("--crf", type=str, default="23", help="Comma separated CRF values")
-    parser.add_argument("--tau", type=float, default=0.1, help="Tau for TFC")
+    parser.add_argument("--tau", type=float, default=None, help="Override preset tau")
     parser.add_argument("--slope-threshold", type=float, default=1e-3, help="Slope threshold for TFC")
     parser.add_argument(
         "--payload-comp-type",
@@ -325,7 +318,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         "--tfc-preset",
         type=str,
         default="anime",
-        choices=["custom", "anime", "lownoise"],
+        choices=["custom", "anime", "lownoise", "general", "screen"],
         help="Preset for TFC runs",
     )
     args = parser.parse_args(argv)
@@ -338,35 +331,38 @@ def main(argv: Optional[List[str]] = None) -> None:
     presets = [p.strip() for p in args.presets.split(",") if p.strip()]
     crfs = [c.strip() for c in args.crf.split(",") if c.strip()]
 
-    tmp = Path(tempfile.mkdtemp(prefix="tfc_bench_"))
-    results: list[BenchResult] = []
-    missing: list[str] = []
+    with tempfile.TemporaryDirectory(prefix="tfc_bench_") as tmp_name:
+        tmp = Path(tmp_name)
+        results: list[BenchResult] = []
+        missing: list[str] = []
 
-    for clip in clips:
-        # TFC
-        _rec_path, res = bench_tfc(
-            clip,
-            tmp,
-            args.tau,
-            args.slope_threshold,
-            args.payload_comp_type,
-            args.tfc_preset,
-        )
-        results.append(res)
-        # ffmpeg baselines
-        for codec in codecs:
-            if codec == "tfc":
-                continue
-            for preset in presets:
-                for crf in crfs:
-                    out = bench_ffmpeg(clip, tmp, codec, preset, crf)
-                    if out is None:
-                        missing.append(codec)
-                        continue
-                    results.append(out[1])
+        for clip in clips:
+            # TFC
+            if "tfc" in codecs:
+                _rec_path, res = bench_tfc(
+                    clip,
+                    tmp,
+                    args.tau,
+                    args.slope_threshold,
+                    args.payload_comp_type,
+                    args.tfc_preset,
+                )
+                results.append(res)
+            # ffmpeg baselines
+            for codec in codecs:
+                if codec == "tfc":
+                    continue
+                for preset in presets:
+                    for crf in crfs:
+                        out = bench_ffmpeg(clip, tmp, codec, preset, crf)
+                        if out is None:
+                            missing.append(codec)
+                            continue
+                        results.append(out[1])
 
-    env = collect_env()
-    write_results(args.out, results, env, sorted(set(missing)))
+        env = collect_env()
+        env["settings"] = {k: str(v) if isinstance(v, Path) else v for k, v in vars(args).items()}
+        write_results(args.out, results, env, sorted(set(missing)))
     print(f"Wrote results to {args.out}")
 
 

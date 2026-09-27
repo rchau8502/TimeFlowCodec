@@ -22,10 +22,14 @@ timeflowdecompress = "timeflowcodec.cli:decompress_main"
 timeflowcodec = "timeflowcodec.cli:main"
 tfc = "timeflowcodec.cli:main"
 
+[project.gui-scripts]
+timeflowplay = "timeflowcodec.player:main"
+timeflowcodec-gui = "gui:main"
+
 [project.optional-dependencies]
 gui = ["PySide6"]
 build = ["build", "twine"]
-bench = ["matplotlib"]
+bench = ["matplotlib", "scikit-image"]
 dev = ["ruff", "pytest"]
 
 [tool.setuptools.packages.find]
@@ -33,6 +37,7 @@ where = ["."]
 include = ["timeflowcodec"]
 
 [tool.setuptools]
+py-modules = ["gui"]
 include-package-data = true
 
 [tool.ruff]
