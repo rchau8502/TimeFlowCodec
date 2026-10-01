@@ -1,3 +1,73 @@
 \chapter{Future Work and Extensions}
-Future extensions include higher-order temporal models, lightweight motion cues,
-robust noise handling, and mixed-precision representations for embedded targets.
+\label{chap:future_work}
+
+While TimeFlowCodec demonstrates strong empirical performance on screen, UI, and synthetic video, its conceptual foundation opens several promising avenues for future research. In this chapter, we outline extensions spanning higher-order polynomial bases, adaptive piecewise splines, global affine motion modeling, learned neural temporal priors, and real-time GPU compute implementations.
+
+\section{Higher-Order Orthogonal Polynomial Bases}
+Currently, TimeFlowCodec supports degree-0 (\textsc{Const}) and degree-1 (\textsc{Linear}) polynomials. While linear models capture simple fades and uniform scrolling, more complex temporal variations---such as non-linear easing curves in UI animations (e.g., cubic Bézier ease-in/out transitions) or rhythmic pulsating elements---exceed linear tolerance.
+
+A natural extension is to generalize temporal regression to higher-order orthogonal polynomials:
+\begin{equation}
+    \hat{s}(t) = \sum_{k=0}^{P} c_k \phi_k(t)
+\end{equation}
+where $\{\phi_k(t)\}_{k=0}^P$ forms an orthogonal polynomial basis over the discrete temporal lattice $\mathcal{T} = \{0, 1, \dots, T-1\}$.
+
+Using discrete \textbf{Chebyshev polynomials} or \textbf{Legendre polynomials}:
+\begin{align}
+    \phi_0(t) &= 1 \\
+    \phi_1(t) &= \frac{2t - (T-1)}{T-1} \\
+    \phi_2(t) &= \frac{3(2t - (T-1))^2 - (T^2 - 1)}{2(T^2 - 1)}
+\end{align}
+Because the basis functions are orthogonal, higher-order coefficients $c_k$ can be evaluated via independent inner products:
+\begin{equation}
+    c_k = \frac{\sum_{t=0}^{T-1} s_t \phi_k(t)}{\sum_{t=0}^{T-1} \phi_k(t)^2}
+\end{equation}
+Adding quadratic ($P=2$) and cubic ($P=3$) modes would allow smooth UI easing curves to be captured with 3 or 4 quantized bytes per pixel, dramatically reducing fallback to raw storage during complex interface transitions.
+
+\section{Piecewise Continuous Splines and Adaptive Knot Placement}
+In typical desktop usage, an application window may remain stationary for 3 seconds, scroll rapidly for 0.5 seconds, and then pause again. Fitting a single global polynomial across the entire 3.5-second window either requires a high polynomial degree or triggers raw fallback.
+
+An effective extension is \textbf{adaptive knot insertion for piecewise temporal splines}:
+\begin{enumerate}
+    \item A temporal change-point detection algorithm identifies abrupt local slope transitions $\Delta b > \theta_{\text{change}}$ across pixel clusters.
+    \item The temporal window is partitioned into adaptive segments with continuous boundary conditions (e.g., linear B-splines or Catmull-Rom splines).
+    \item This enables long chunk durations ($T \ge 120$ frames) while preserving local adaptability.
+\end{enumerate}
+
+\section{Global Affine Motion Modeling for Screen Scrolling}
+As discussed in Chapter~\ref{chap:discussion}, block-based motion vectors are ill-suited for document and web page scrolling. A more elegant solution is \textbf{global affine motion compensation}:
+\begin{equation}
+    \begin{bmatrix}
+        x' \\
+        y'
+    \end{bmatrix}
+    =
+    \begin{bmatrix}
+        a_{11} & a_{12} \\
+        a_{21} & a_{22}
+    \end{bmatrix}
+    \begin{bmatrix}
+        x \\
+        y
+    \end{bmatrix}
+    +
+    \begin{bmatrix}
+        v_x \\
+        v_y
+    \end{bmatrix}
+\end{equation}
+For vertical document scrolling, the transform simplifies to a pure vertical translation vector $v_y(t)$. By estimating a single global vector $v_y(t)$ per frame, the encoder can warp the coordinate frame prior to regression, converting moving text back into stationary trajectories that compress into \textsc{Mode\_TFC\_Const}.
+
+\section{Learned Neural Temporal Priors}
+Another promising direction is fusing per-pixel temporal regression with lightweight neural network priors. Rather than training a heavy end-to-end convolutional network, a compact 1D temporal autoencoder or recurrent neural network (RNN) can learn a low-dimensional basis dictionary specifically tailored for synthetic UI transitions:
+\begin{equation}
+    \hat{\mathbf{s}} = \mathbf{D}_{\text{learned}} \mathbf{z}
+\end{equation}
+where $\mathbf{D}_{\text{learned}} \in \mathbb{R}^{T \times K}$ is a fixed basis matrix trained on thousands of hours of screen recordings, and $\mathbf{z} \in \mathbb{R}^K$ is a low-dimensional latent code. Because the dictionary $\mathbf{D}_{\text{learned}}$ is shared between encoder and decoder, only the low-rank code $\mathbf{z}$ needs to be transmitted.
+
+\section{Real-Time 4K / 60 FPS GPU Compute Shaders}
+Finally, the primary systems frontier for TimeFlowCodec is a native GPU implementation:
+\begin{itemize}
+    \item \textbf{WebGPU and Metal Shaders:} Implementing the OLS accumulation formulas in WebGPU Compute Shaders would allow direct in-browser screen recording and playback with zero CPU overhead.
+    \item \textbf{Zero-Copy Desktop Pipelines:} By capturing desktop surfaces directly via platform display APIs (such as Apple ScreenCaptureKit or Windows Desktop Duplication API) directly into GPU memory, TimeFlowCodec can encode 4K video at 60 FPS entirely within VRAM, bypassing PCIe bus transfer bottlenecks.
+\end{itemize}

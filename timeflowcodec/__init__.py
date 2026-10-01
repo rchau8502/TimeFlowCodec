@@ -1,5 +1,6 @@
 """TimeFlowCodec temporal modeling codec."""
 
+from .bjontegaard import bd_psnr, bd_rate
 from .constants import (
     BITS_PER_MODE,
     COLOR_FORMAT_RGB,
@@ -45,7 +46,10 @@ __all__ = [
     "COMP_ZSTD",
     "encode_video_to_tfc",
     "decode_tfc_to_video",
+    "bd_rate",
+    "bd_psnr",
     "get_version_string",
     "get_build_meta",
     "__version__",
 ]
+

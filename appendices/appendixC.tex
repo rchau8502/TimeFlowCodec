@@ -1,3 +1,58 @@
-\chapter{Supplemental Experimental Data}
-Additional tables and plots for rate-distortion and modeled-vs-fallback ratios
-across content types.
+\chapter{Container Binary Schema Specification}
+\label{app:schema}
+
+This appendix specifies the byte-level binary layout of the .tfc container versions 3, 4, and 5.
+
+\section{Version 3 and 4 Segment Stream Layout}
+In versions 3 and 4, the compressed payload for each color channel is arranged sequentially as follows:
+\begin{enumerate}
+    \item \textbf{Packed Mode Map Header:}
+    \begin{itemize}
+        \item 4 bytes: Uncompressed length of RLE mode stream $L_{\text{rle}}$.
+        \item $L_{\text{rle}}$ bytes: Run-length encoded stream of 2-bit packed mode tokens.
+    \end{itemize}
+    \item \textbf{Quantized Intercept Stream ($A$):}
+    \begin{itemize}
+        \item Array of uint8 values corresponding to all units where $M(x, y) \in \{\textsc{Const}, \textsc{Linear}\}$.
+    \end{itemize}
+    \item \textbf{Quantized Slope Stream ($B$):}
+    \begin{itemize}
+        \item Array of signed int16 values ($2$ bytes each, little-endian) corresponding to units where $M(x, y) = \textsc{Linear}$.
+    \end{itemize}
+    \item \textbf{Raw Fallback Sample Stream ($F$):}
+    \begin{itemize}
+        \item Block of $T \times N_{\text{raw}}$ uncompressed uint8 samples for all units where $M(x, y) = \textsc{Raw}$.
+    \end{itemize}
+\end{enumerate}
+
+\section{Version 5 Chunked Record Framing}
+A version 5 .tfc stream consists of a master header followed by independent chunk blocks:
+
+\begin{table}[h]
+\centering
+\small
+\caption{Version 5 Binary Chunk Framing Syntax.}
+\label{tab:v5_syntax}
+\begin{tabular}{llp{7cm}}
+\toprule
+\textbf{Byte Offset} & \textbf{Data Type} & \textbf{Field Description} \\
+\midrule
+$0 \dots 3$ & ASCII \texttt{"TFC5"} & Container magic bytes. \\
+$4 \dots 7$ & uint32 (big-endian) & Master JSON header length ($L_{\text{json}}$). \\
+$8 \dots 8 + L_{\text{json}} - 1$ & UTF-8 JSON & Video dimensions, rational frame rate, and audio parameters. \\
+\midrule
+\multicolumn{3}{c}{\textit{Repeated for each Video Chunk $k = 0, \dots, N_{\text{chunks}}-1$}} \\
+\midrule
+$0 \dots 3$ & uint32 & Chunk payload length in bytes ($S_{\text{chunk}}$). \\
+$4 \dots 7$ & uint32 & CRC32 integrity checksum of chunk payload. \\
+$8 \dots 9$ & uint16 & Number of video frames in this chunk ($T_{\text{chunk}}$). \\
+$10 \dots 10 + S_{\text{chunk}} - 1$ & Binary Payload & Compressed planes (R, G, B) with RLE mode maps and quantized parameters. \\
+\midrule
+\multicolumn{3}{c}{\textit{Optional Audio Stream Interleaving}} \\
+\midrule
+$0 \dots 3$ & ASCII \texttt{"TFCA"} & Audio packet identifier tag. \\
+$4 \dots 7$ & uint32 & Audio payload length ($S_{\text{audio}}$). \\
+$8 \dots 8 + S_{\text{audio}} - 1$ & Compressed Audio & Raw audio packets (AAC/Opus) for corresponding time window. \\
+\bottomrule
+\end{tabular}
+\end{table}

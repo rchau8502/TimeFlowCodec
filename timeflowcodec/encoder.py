@@ -245,10 +245,13 @@ def _encode_plane_from_stats(
     tau: float,
     slope_threshold: float,
     edge_strength: np.ndarray | None = None,
+    rdo: bool = False,
+    lambda_rdo: float = 0.0,
 ):
     """
     Vectorized per-plane encode using precomputed sums to avoid storing frames.
     Returns per-pixel modes/params and fallback mask (bool array).
+    Supports Lagrangian Rate-Distortion Optimization (RDO) when rdo=True.
     """
     N = sum_s.shape[0]
     p_counts = tile_pixel_counts.astype(np.float64, copy=False)
@@ -280,12 +283,39 @@ def _encode_plane_from_stats(
         slope_arr[flat_mask] *= 1.35
         slope_arr[edge_mask] *= 0.55
 
-    modeled = r <= tau_arr
-    const_mask = modeled & (np.abs(b) < slope_arr)
-    zero_mask = sum_s2 == 0
-    const_mask |= zero_mask
-    linear_mask = modeled & (~const_mask)
-    fallback_mask = ~(const_mask | linear_mask)
+    if rdo and lambda_rdo > 0.0:
+        safe_n = np.maximum(n, 1e-9)
+        rss_const = np.maximum(0.0, sum_s2 - (sum_s * sum_s) / safe_n)
+        d_const = rss_const / safe_n
+        r_const = 10.0  # 2-bit mode + 8-bit a
+        j_const = d_const + lambda_rdo * r_const
+
+        d_linear = np.maximum(0.0, D_tfc)
+        r_linear = 26.0  # 2-bit mode + 8-bit a + 16-bit b
+        j_linear = d_linear + lambda_rdo * r_linear
+
+        r_raw = 2.0 + 8.0 * float(T) * p_counts
+        d_raw = 0.0
+        j_raw = d_raw + lambda_rdo * r_raw
+
+        # Upper-bound envelope constraint: cannot exceed tau tolerance
+        d_ratio_const = d_const / D_sig
+        d_ratio_linear = d_linear / D_sig
+        j_const = np.where(d_ratio_const <= tau_arr, j_const, np.inf)
+        j_linear = np.where(d_ratio_linear <= tau_arr, j_linear, np.inf)
+
+        const_mask = (j_const <= j_linear) & (j_const <= j_raw)
+        zero_mask = sum_s2 == 0
+        const_mask |= zero_mask
+        linear_mask = (~const_mask) & (j_linear <= j_raw)
+        fallback_mask = ~(const_mask | linear_mask)
+    else:
+        modeled = r <= tau_arr
+        const_mask = modeled & (np.abs(b) < slope_arr)
+        zero_mask = sum_s2 == 0
+        const_mask |= zero_mask
+        linear_mask = modeled & (~const_mask)
+        fallback_mask = ~(const_mask | linear_mask)
 
     modes[const_mask] = MODE_TFC_CONST
     modes[linear_mask] = MODE_TFC_LINEAR
@@ -332,6 +362,9 @@ def encode_video_to_tfc(
     matrix_rate_ratio: float = 0.95,
     preset: str | None = None,
     motion_comp: bool = False,
+    rdo: bool = False,
+    lambda_rdo: float | None = None,
+    threads: int = 1,
     cancel_check=None,
     progress_callback=None,
 ) -> None:
@@ -416,6 +449,11 @@ def encode_video_to_tfc(
         if scene_cut == "auto" and container_version == 1:
             warnings.warn("scene_cut auto requires container version 2 segmentation; disabling scene cuts.")
             scene_cut = "off"
+
+        if rdo and (lambda_rdo is None or lambda_rdo <= 0.0):
+            lambda_rdo = float(tau) * 1000.0
+        elif not rdo:
+            lambda_rdo = 0.0
 
         reader = iter(input_path) if isinstance(input_path, np.ndarray) else imageio.get_reader(input_path)
         resources.callback(getattr(reader, "close", lambda: None))
@@ -576,6 +614,8 @@ def encode_video_to_tfc(
                         tau,
                         slope_threshold,
                         edge_strength=edge_strength,
+                        rdo=rdo,
+                        lambda_rdo=lambda_rdo,
                     )
                     raw_predictors = {
                         int(idx): {"a": float(fit_a[idx]), "b": float(fit_b[idx])} for idx in np.nonzero(fb_mask)[0]
@@ -801,6 +841,8 @@ def encode_video_to_tfc(
                             seg_len,
                             tau,
                             slope_threshold,
+                            rdo=rdo,
+                            lambda_rdo=lambda_rdo,
                         )
                     )
                     modes = modes_tile[tile_idx_map].astype(np.uint8, copy=False)

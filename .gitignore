@@ -16,6 +16,36 @@ dist/
 *.spec
 !timeflowcodec_gui.spec
 
+# LaTeX build outputs
+*.aux
+*.bbl
+*.blg
+*.log
+*.out
+*.toc
+*.nav
+*.snm
+*.vrb
+chapters/*.aux
+appendices/*.aux
+presentation/*.aux
+presentation/*.log
+presentation/*.out
+presentation/*.nav
+presentation/*.snm
+presentation/*.toc
+presentation/*.vrb
+
+# C / Native builds
+libtfc/build/
+
+# Paper LaTeX build outputs
+paper/*.aux
+paper/*.log
+paper/*.out
+paper/*.bbl
+paper/*.blg
+
 # OS
 .DS_Store
 
@@ -23,3 +53,5 @@ dist/
 bench_out/
 clips/*.mp4
 clips/*.mkv
+video_mc.tfc
+main.pdf

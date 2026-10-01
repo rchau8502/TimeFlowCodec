@@ -66,6 +66,7 @@ def decode_tfc_to_video(
     output_path: str | None,
     fps: int | None = None,
     stream_output: bool = False,
+    threads: int = 1,
     cancel_check=None,
     progress_callback=None,
 ) -> np.ndarray | None:
@@ -76,7 +77,15 @@ def decode_tfc_to_video(
         if stream.read(4) == b"TFC5":
             from .chunked import decode
 
-            return decode(input_path, output_path, fps, stream_output, cancel_check, progress_callback)
+            return decode(
+                input_path,
+                output_path,
+                fps,
+                stream_output,
+                threads=threads,
+                cancel_check=cancel_check,
+                progress_callback=progress_callback,
+            )
     check_cancel(cancel_check)
     fps = 30 if fps is None else fps
     if not np.isfinite(fps) or fps <= 0:

@@ -6,7 +6,9 @@ optional AUDI record holds a Matroska audio stream. DONE is empty and terminal.
 No record may be interpreted before its length and checksum are validated.
 """
 
+import concurrent.futures
 import json
+import os
 import shutil
 import struct
 import tempfile
@@ -136,6 +138,14 @@ def encode(source, destination, options, cancel_check=None, progress_callback=No
     from .encoder import encode_video_to_tfc
 
     check_cancel(cancel_check)
+    threads = options.pop("threads", 1)
+    if threads is None:
+        threads = 1
+    if type(threads) is not int or threads < 0:
+        raise ValueError("threads must be a non-negative integer")
+    if threads == 0:
+        threads = max(1, min(os.cpu_count() or 4, 16))
+
     window = options.pop("window", None)
     if window is None:
         window = 16
@@ -165,64 +175,199 @@ def encode(source, destination, options, cancel_check=None, progress_callback=No
         with open(temporary, "wb") as output, closing(imageio.get_reader(source)) as reader:
             output.write(MAGIC + struct.pack("<I", len(encoded_metadata)) + encoded_metadata)
             frames = iter(reader)
-            completed = 0
-            while completed < metadata["num_frames"]:
-                check_cancel(cancel_check)
-                count = min(metadata["chunk_frames"], metadata["num_frames"] - completed)
-                chunk = []
-                for _ in range(count):
+            if threads == 1:
+                completed = 0
+                while completed < metadata["num_frames"]:
                     check_cancel(cancel_check)
-                    try:
-                        frame = next(frames)
-                    except StopIteration as exc:
-                        raise ValueError("Source ended before its probed frame count") from exc
-                    if frame.shape != (metadata["height"], metadata["width"], 3):
-                        raise ValueError("Source frame dimensions changed")
-                    chunk.append(frame)
-                encode_video_to_tfc(np.asarray(chunk), str(chunk_path), **options, cancel_check=cancel_check)
-                _write_record(output, b"VIDS", chunk_path, cancel_check)
-                completed += count
-                report_progress(progress_callback, "Encoding frames", completed, metadata["num_frames"])
+                    count = min(metadata["chunk_frames"], metadata["num_frames"] - completed)
+                    chunk = []
+                    for _ in range(count):
+                        check_cancel(cancel_check)
+                        try:
+                            frame = next(frames)
+                        except StopIteration as exc:
+                            raise ValueError("Source ended before its probed frame count") from exc
+                        if frame.shape != (metadata["height"], metadata["width"], 3):
+                            raise ValueError("Source frame dimensions changed")
+                        chunk.append(frame)
+                    encode_video_to_tfc(np.asarray(chunk), str(chunk_path), **options, cancel_check=cancel_check)
+                    _write_record(output, b"VIDS", chunk_path, cancel_check)
+                    completed += count
+                    report_progress(progress_callback, "Encoding frames", completed, metadata["num_frames"])
+            else:
+                completed = 0
+                chunk_idx = 0
+                write_idx = 0
+                max_in_flight = max(2, 2 * threads)
+                pending: dict[int, tuple[concurrent.futures.Future, Path, int]] = {}
+
+                def _encode_worker(chunk_arr, out_path, opts, cancel):
+                    encode_video_to_tfc(chunk_arr, str(out_path), **opts, cancel_check=cancel)
+                    return out_path
+
+                with concurrent.futures.ThreadPoolExecutor(max_workers=threads) as executor:
+                    while completed < metadata["num_frames"]:
+                        check_cancel(cancel_check)
+                        dispatched_frames = chunk_idx * metadata["chunk_frames"]
+                        if dispatched_frames < metadata["num_frames"]:
+                            count = min(metadata["chunk_frames"], metadata["num_frames"] - dispatched_frames)
+                            chunk = []
+                            for _ in range(count):
+                                check_cancel(cancel_check)
+                                try:
+                                    frame = next(frames)
+                                except StopIteration as exc:
+                                    raise ValueError("Source ended before its probed frame count") from exc
+                                if frame.shape != (metadata["height"], metadata["width"], 3):
+                                    raise ValueError("Source frame dimensions changed")
+                                chunk.append(frame)
+                            c_path = Path(work) / f"chunk_{chunk_idx}.tfc"
+                            fut = executor.submit(
+                                _encode_worker,
+                                np.asarray(chunk),
+                                c_path,
+                                dict(options),
+                                cancel_check,
+                            )
+                            pending[chunk_idx] = (fut, c_path, count)
+                            chunk_idx += 1
+
+                        while pending and (
+                            len(pending) >= max_in_flight or dispatched_frames >= metadata["num_frames"]
+                        ):
+                            check_cancel(cancel_check)
+                            fut, c_path, c_count = pending.pop(write_idx)
+                            fut.result()
+                            _write_record(output, b"VIDS", c_path, cancel_check)
+                            c_path.unlink(missing_ok=True)
+                            completed += c_count
+                            write_idx += 1
+                            report_progress(progress_callback, "Encoding frames", completed, metadata["num_frames"])
+                            if completed >= metadata["num_frames"]:
+                                break
+
             if metadata["has_audio"]:
                 _write_record(output, b"AUDI", audio_path, cancel_check)
             output.write(RECORD.pack(b"DONE", 0, 0))
             check_cancel(cancel_check)
 
 
-def iter_frames(source, cancel_check=None, progress_callback=None, audio_path=None, work_dir=None):
+def iter_frames(
+    source,
+    cancel_check=None,
+    progress_callback=None,
+    audio_path=None,
+    work_dir=None,
+    threads=1,
+):
     from .decoder import decode_tfc_to_video
     from .format import read_header
+
+    if threads is None:
+        threads = 1
+    if type(threads) is not int or threads < 0:
+        raise ValueError("threads must be a non-negative integer")
+    if threads == 0:
+        threads = max(1, min(os.cpu_count() or 4, 16))
 
     with open(source, "rb") as stream:
         metadata = read_header(stream)
     with tempfile.TemporaryDirectory(prefix="timeflow-decode-", dir=work_dir) as work:
-        chunk_path = Path(work) / "chunk.tfc"
-        completed = 0
-        for tag, data in records(source, cancel_check, audio_path):
-            if tag == b"AUDI":
-                continue
-            chunk_path.write_bytes(data)
-            with chunk_path.open("rb") as stream:
-                header = read_header(stream)
-            count = min(metadata["chunk_frames"], metadata["num_frames"] - completed)
-            if (
-                header["version"] not in (3, 4)
-                or header["width"] != metadata["width"]
-                or header["height"] != metadata["height"]
-                or header["num_frames"] != count
-            ):
-                raise ValueError("Chunk header does not match container")
-            frames = decode_tfc_to_video(str(chunk_path), None, cancel_check=cancel_check)
-            for frame in frames:
-                check_cancel(cancel_check)
-                yield frame
-                completed += 1
-            report_progress(progress_callback, "Decoding frames", completed, metadata["num_frames"])
-        if completed != metadata["num_frames"]:
-            raise ValueError("Decoded frame total does not match metadata")
+        if threads == 1:
+            chunk_path = Path(work) / "chunk.tfc"
+            completed = 0
+            for tag, data in records(source, cancel_check, audio_path):
+                if tag == b"AUDI":
+                    continue
+                chunk_path.write_bytes(data)
+                with chunk_path.open("rb") as stream:
+                    header = read_header(stream)
+                count = min(metadata["chunk_frames"], metadata["num_frames"] - completed)
+                if (
+                    header["version"] not in (3, 4)
+                    or header["width"] != metadata["width"]
+                    or header["height"] != metadata["height"]
+                    or header["num_frames"] != count
+                ):
+                    raise ValueError("Chunk header does not match container")
+                frames = decode_tfc_to_video(str(chunk_path), None, cancel_check=cancel_check)
+                for frame in frames:
+                    check_cancel(cancel_check)
+                    yield frame
+                    completed += 1
+                report_progress(progress_callback, "Decoding frames", completed, metadata["num_frames"])
+            if completed != metadata["num_frames"]:
+                raise ValueError("Decoded frame total does not match metadata")
+        else:
+            completed = 0
+            dispatched = 0
+            chunk_read_idx = 0
+            chunk_yield_idx = 0
+            max_in_flight = max(2, 2 * threads)
+            pending_chunks: dict[int, tuple[concurrent.futures.Future, Path, int]] = {}
+
+            def _decode_worker(cpath, cancel):
+                return decode_tfc_to_video(str(cpath), None, cancel_check=cancel)
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=threads) as executor:
+                for tag, data in records(source, cancel_check, audio_path):
+                    if tag == b"AUDI":
+                        continue
+                    cpath = Path(work) / f"chunk_{chunk_read_idx}.tfc"
+                    cpath.write_bytes(data)
+                    with cpath.open("rb") as stream:
+                        header = read_header(stream)
+                    expected_count = min(metadata["chunk_frames"], metadata["num_frames"] - dispatched)
+                    if (
+                        header["version"] not in (3, 4)
+                        or header["width"] != metadata["width"]
+                        or header["height"] != metadata["height"]
+                        or header["num_frames"] != expected_count
+                    ):
+                        raise ValueError("Chunk header does not match container")
+                    dispatched += expected_count
+
+                    fut = executor.submit(_decode_worker, cpath, cancel_check)
+                    pending_chunks[chunk_read_idx] = (fut, cpath, expected_count)
+                    chunk_read_idx += 1
+
+                    while len(pending_chunks) >= max_in_flight:
+                        check_cancel(cancel_check)
+                        fut, cpath, count = pending_chunks.pop(chunk_yield_idx)
+                        frames = fut.result()
+                        cpath.unlink(missing_ok=True)
+                        for frame in frames:
+                            check_cancel(cancel_check)
+                            yield frame
+                            completed += 1
+                        report_progress(progress_callback, "Decoding frames", completed, metadata["num_frames"])
+                        chunk_yield_idx += 1
+
+                while chunk_yield_idx < chunk_read_idx:
+                    check_cancel(cancel_check)
+                    fut, cpath, count = pending_chunks.pop(chunk_yield_idx)
+                    frames = fut.result()
+                    cpath.unlink(missing_ok=True)
+                    for frame in frames:
+                        check_cancel(cancel_check)
+                        yield frame
+                        completed += 1
+                    report_progress(progress_callback, "Decoding frames", completed, metadata["num_frames"])
+                    chunk_yield_idx += 1
+
+            if completed != metadata["num_frames"]:
+                raise ValueError("Decoded frame total does not match metadata")
 
 
-def decode(source, destination, fps=None, stream_output=False, cancel_check=None, progress_callback=None):
+def decode(
+    source,
+    destination,
+    fps=None,
+    stream_output=False,
+    threads=1,
+    cancel_check=None,
+    progress_callback=None,
+):
     from .format import read_header
 
     with open(source, "rb") as stream:
@@ -235,12 +380,12 @@ def decode(source, destination, fps=None, stream_output=False, cancel_check=None
             raise ValueError("Array output cannot be combined with stream_output")
         if metadata["width"] * metadata["height"] * metadata["num_frames"] * 3 > 256 * 1024 * 1024:
             raise ValueError("Buffered RGB output size limit exceeded; use streaming output")
-        return np.stack(list(iter_frames(source, cancel_check, progress_callback)))
+        return np.stack(list(iter_frames(source, cancel_check, progress_callback, threads=threads)))
     with tempfile.TemporaryDirectory(prefix="timeflow-export-") as work, atomic_destination(destination) as temporary:
         silent, audio = Path(work) / ("silent" + Path(destination).suffix), Path(work) / "audio.mka"
         writer = imageio.get_writer(str(silent), fps=float(rate), macro_block_size=1, output_params=["-r", str(rate)])
         try:
-            for frame in iter_frames(source, cancel_check, progress_callback, audio):
+            for frame in iter_frames(source, cancel_check, progress_callback, audio, threads=threads):
                 writer.append_data(frame)
         finally:
             writer.close()

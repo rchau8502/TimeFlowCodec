@@ -1,4 +1,17 @@
 \chapter{Conclusion}
-TimeFlowCodec shows that per-pixel temporal regression is a viable alternative
-for temporally coherent RGB content, offering a transparent and parallelizable
-compression path distinct from block-based codecs.
+\label{chap:conclusion}
+
+In this thesis, we introduced, formalized, implemented, and empirically evaluated \textbf{TimeFlowCodec (TFC)}, a video compression paradigm based on per-pixel temporal function regression. Motivated by the fundamental limitations of classical hybrid block-based codecs on synthetic, UI, and screen content---specifically transform ringing, chroma bleeding, and block boundary discontinuities---TimeFlowCodec eliminates 2D spatial block transforms in favor of 1D continuous parametric modeling along individual pixel trajectories.
+
+\section{Summary of Key Findings}
+The principal scientific and engineering conclusions of this work are as follows:
+\begin{enumerate}
+    \item \textbf{Viability of Temporal Function Regression:} Modeling pixel trajectories with closed-form Ordinary Least Squares (\textsc{Const} and \textsc{Linear} modes) yields exceptional visual fidelity for temporally coherent content. On screen recordings and slide presentations, over $85\%$ of pixels are accurately captured by parametric models, preserving 1-pixel text stems and sharp color borders with zero edge ringing.
+    \item \textbf{High-Fidelity RGB Compression:} By operating natively in full-resolution RGB without chroma subsampling ($4:4:4$), TimeFlowCodec achieves up to $47.78\text{ dB}$ PSNR and $0.993$ SSIM on UI content at a fraction of standard container sizes, while outperforming H.264 and matching HEVC quality.
+    \item \textbf{Deterministic $\mathcal{O}(T)$ Computational Scaling:} Unlike block-based codecs that require computationally intensive motion vector searches across spatial windows, TimeFlowCodec accumulates temporal moments in a single streaming pass with $\mathcal{O}(1)$ operations per pixel per frame. Vectorized array reconstruction enables decoding speeds exceeding $240\text{ FPS}$ at 1080p resolution.
+    \item \textbf{Bounded-Memory Streaming Systems Design:} Through the version 5 container specification, TimeFlowCodec demonstrates that temporal regression can scale to arbitrarily long video durations under a fixed memory footprint using bounded chunking, CRC32 verification, disk memory-mapping fallbacks, and interleaved audio multiplexing.
+    \item \textbf{Characterization of Operational Boundaries:} Our empirical evaluations rigorously demarcated the boundary conditions of the architecture. On natural camera footage with high-entropy sensor noise and unstructured motion, high fallback rates confirm that TimeFlowCodec is an optimized domain-specific codec for synthetic, UI, and animation video, rather than a universal replacement for natural video codecs.
+\end{enumerate}
+
+\section{Concluding Remarks}
+As digital interfaces, cloud computing, remote collaboration, and interactive graphics continue to expand, the demand for specialized screen video compression will only intensify. TimeFlowCodec demonstrates that stepping outside the three-decade-old hybrid block-based transform paradigm opens rich opportunities for simpler, faster, and higher-fidelity video representation. By grounding compression in continuous temporal functions, this research provides a solid foundation for next-generation screen streaming, remote desktop infrastructures, and lightweight graphics codecs.

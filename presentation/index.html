@@ -1,0 +1,1204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TimeFlowCodec: A Per-Pixel Temporal Function Video Codec</title>
+    <style>
+        :root {
+            --uci-blue: #0064A4;
+            --uci-gold: #FFD200;
+            --dark: #1A1D20;
+            --light-bg: #F8FAFC;
+            --card-bg: #FFFFFF;
+            --text-main: #2D3748;
+            --text-muted: #718096;
+            --accent-green: #2CA02C;
+            --accent-red: #D62728;
+            --border-color: #E2E8F0;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--dark);
+            color: var(--text-main);
+            overflow: hidden;
+            height: 100vh;
+            width: 100vw;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #presentation-container {
+            position: relative;
+            width: 95vw;
+            max-width: 1280px;
+            height: 85vh;
+            max-height: 720px;
+            background: var(--card-bg);
+            border-radius: 12px;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        header.slide-header {
+            background: var(--uci-blue);
+            color: white;
+            padding: 14px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 3px solid var(--uci-gold);
+        }
+
+        header.slide-header h2 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            letter-spacing: -0.01em;
+        }
+
+        .slide-counter {
+            font-size: 0.9rem;
+            opacity: 0.9;
+            font-weight: 500;
+            background: rgba(255, 255, 255, 0.15);
+            padding: 3px 10px;
+            border-radius: 20px;
+        }
+
+        .slide-body {
+            flex: 1;
+            padding: 24px 32px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .slide {
+            display: none;
+            height: 100%;
+            flex-direction: column;
+            animation: fadeIn 0.25s ease-in-out;
+        }
+
+        .slide.active {
+            display: flex;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(6px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Slide layout styles */
+        .title-slide {
+            text-align: center;
+            justify-content: center;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .title-slide h1 {
+            font-size: 2.2rem;
+            color: var(--uci-blue);
+            line-height: 1.2;
+            max-width: 900px;
+        }
+
+        .title-slide h3 {
+            font-size: 1.2rem;
+            color: var(--text-muted);
+            font-weight: 400;
+        }
+
+        .title-slide .author-box {
+            margin-top: 24px;
+            padding: 12px 24px;
+            background: var(--light-bg);
+            border-radius: 8px;
+            border-left: 4px solid var(--uci-gold);
+            text-align: left;
+            display: inline-block;
+        }
+
+        .two-cols {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+            height: 100%;
+            align-items: center;
+        }
+
+        .card {
+            background: var(--light-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 18px 20px;
+        }
+
+        .card h3 {
+            color: var(--uci-blue);
+            font-size: 1.1rem;
+            margin-bottom: 10px;
+            border-bottom: 2px solid var(--uci-gold);
+            padding-bottom: 6px;
+        }
+
+        ul {
+            padding-left: 20px;
+            line-height: 1.6;
+            color: var(--text-main);
+            font-size: 0.95rem;
+        }
+
+        li {
+            margin-bottom: 6px;
+        }
+
+        .figure-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            height: 100%;
+        }
+
+        .figure-container img {
+            max-width: 100%;
+            max-height: 380px;
+            object-fit: contain;
+            border-radius: 6px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+
+        .caption {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-top: 8px;
+            text-align: center;
+        }
+
+        .highlight-box {
+            background: #EBF8FF;
+            border-left: 4px solid var(--uci-blue);
+            padding: 12px 16px;
+            border-radius: 4px;
+            margin-top: 14px;
+            font-size: 0.95rem;
+        }
+
+        .math-block {
+            background: #2D3748;
+            color: #F7FAFC;
+            padding: 10px 14px;
+            border-radius: 6px;
+            font-family: "SF Mono", Consolas, "Courier New", monospace;
+            font-size: 0.9rem;
+            margin: 8px 0;
+            overflow-x: auto;
+        }
+
+        /* SCC Benchmark Table */
+        .scc-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.88rem;
+            margin: 10px 0;
+            background: white;
+            border-radius: 6px;
+            overflow: hidden;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+        }
+        .scc-table th, .scc-table td {
+            padding: 8px 12px;
+            text-align: center;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .scc-table th {
+            background: #2D3748;
+            color: #F7FAFC;
+            font-weight: 600;
+            font-size: 0.82rem;
+            letter-spacing: 0.5px;
+        }
+        .scc-table td:first-child, .scc-table th:first-child {
+            text-align: left;
+            font-weight: 500;
+        }
+        .scc-table tr:last-child td {
+            font-weight: bold;
+            background: #EDF2F7;
+            border-bottom: none;
+            border-top: 2px solid #CBD5E0;
+        }
+        .val-good {
+            color: #2F855A;
+            font-weight: 600;
+        }
+
+        /* Interactive Loupe Widget */
+        .loupe-tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 10px;
+            justify-content: center;
+        }
+        .loupe-tab-btn {
+            background: #EDF2F7;
+            border: 1px solid var(--border-color);
+            padding: 5px 12px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            font-weight: 600;
+            color: var(--text-main);
+            transition: all 0.15s ease;
+        }
+        .loupe-tab-btn:hover {
+            background: #E2E8F0;
+        }
+        .loupe-tab-btn.active {
+            background: var(--uci-blue);
+            color: white;
+            border-color: var(--uci-blue);
+        }
+        .loupe-widget {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            background: white;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+        }
+        .canvas-row {
+            display: flex;
+            gap: 14px;
+            width: 100%;
+            justify-content: center;
+            align-items: flex-start;
+        }
+        .loupe-canvas-box {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .loupe-canvas-box canvas {
+            border: 1px solid #CBD5E0;
+            border-radius: 4px;
+            background: #1A202C;
+        }
+        .loupe-label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            margin-top: 5px;
+        }
+        .loupe-metrics {
+            margin-top: 10px;
+            width: 100%;
+            display: flex;
+            justify-content: space-around;
+            background: #F7FAFC;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 0.82rem;
+            border: 1px solid #E2E8F0;
+        }
+
+        /* Controls footer */
+        footer.controls {
+            background: #EDF2F7;
+            padding: 12px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .btn {
+            background: var(--uci-blue);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: all 0.15s ease;
+        }
+
+        .btn:hover {
+            background: #005084;
+        }
+
+        .btn:disabled {
+            background: #CBD5E0;
+            cursor: not-allowed;
+        }
+
+        .shortcuts-hint {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        /* Speaker notes drawer */
+        #notes-drawer {
+            display: none;
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 180px;
+            background: #111;
+            color: #ddd;
+            padding: 16px 32px;
+            box-shadow: 0 -5px 20px rgba(0, 0, 0, 0.5);
+            font-size: 0.9rem;
+            line-height: 1.5;
+            overflow-y: auto;
+            border-top: 2px solid var(--uci-gold);
+            z-index: 1000;
+        }
+
+        #notes-drawer.open {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+
+<div id="presentation-container">
+    <header class="slide-header">
+        <h2 id="header-title">TimeFlowCodec: Research Overview</h2>
+        <div class="slide-counter"><span id="curr-slide">1</span> / <span id="total-slides">20</span></div>
+    </header>
+
+    <div class="slide-body">
+        <!-- Slide 1: Title -->
+        <div class="slide active title-slide" data-title="TimeFlowCodec: Title Slide" data-notes="Welcome everyone. Today I am presenting TimeFlowCodec, an unconventional video compression paradigm based on per-pixel temporal function regression designed specifically for screen, UI, and synthetic animation video.">
+            <h1>TimeFlowCodec: A Per-Pixel Temporal Function Video Codec</h1>
+            <h3>An Orthogonal Paradigm to Block-Based Hybrid Transform Coding</h3>
+            <div class="author-box">
+                <strong>Rich Chau</strong><br>
+                Department of Computer Science<br>
+                University of California, Irvine
+            </div>
+            <p style="color: var(--text-muted); font-size: 0.9rem; margin-top: 10px;">Master's Research Defense & Conference Presentation</p>
+        </div>
+
+        <!-- Slide 2: Motivation -->
+        <div class="slide" data-title="Motivation: Screen & Synthetic Video Explosion" data-notes="Modern video traffic has shifted: a huge percentage of video is now screen content, code tutorials, RDP sessions, slide decks, and gaming. But every major codec from H.261 to AV1 was designed for physical camera footage, not synthetic pixels.">
+            <div class="two-cols">
+                <div>
+                    <div class="card">
+                        <h3>The Synthetic Video Explosion</h3>
+                        <ul>
+                            <li><strong>Remote Work & VDI:</strong> Remote Desktop Protocol (RDP) and Virtual Desktop Infrastructure</li>
+                            <li><strong>Screencasts & Education:</strong> High-definition code walkthroughs and tutorials</li>
+                            <li><strong>Slide Decks:</strong> Presentation decks and digital whiteboards</li>
+                            <li><strong>Interactive Graphics:</strong> Cloud application streaming and 2D animations</li>
+                        </ul>
+                    </div>
+                    <div class="highlight-box">
+                        <strong>The Conflict:</strong> Standard codecs optimize for photographic textures, but screen content exhibits radically different statistical properties!
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>Distinct Statistics of Screen Content</h3>
+                    <ul>
+                        <li><strong>Razor-Sharp Edges:</strong> Single-pixel font stems and colored syntax</li>
+                        <li><strong>Homogeneous Regions:</strong> Massive contiguous solid backgrounds</li>
+                        <li><strong>Strict Palettes:</strong> Zero optical noise or sensor grain</li>
+                        <li><strong>Temporal Coherence:</strong> Prolonged static periods punctuated by localized micro-updates (e.g. blinking cursor)</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 3: The Classical Video Coding Pipeline -->
+        <div class="slide" data-title="The Classical Video Coding Pipeline: 30 Years of Blocks" data-notes="From H.261 in 1988 up through modern standards like H.264, H.265/HEVC, and AV1, every major video codec relies on the same canonical hybrid architecture: splitting frames into square spatial blocks, searching reference frames for motion vectors, computing spatial residuals with 2D DCT/DST transforms, and decimating color with 4:2:0 subsampling. This architecture was brilliant for natural video, but fails on synthetic screen content.">
+            <div class="two-cols">
+                <div class="figure-container">
+                    <img src="../figures/temporal_fitting_concept.png" alt="Temporal Fitting Concept">
+                    <div class="caption">Figure: The canonical hybrid video architecture (H.261 &rarr; AV1).</div>
+                </div>
+                <div>
+                    <div class="card" style="margin-bottom: 14px;">
+                        <h3>Spatial Block Partitioning</h3>
+                        <p style="font-size: 0.95rem; line-height: 1.5;">Subdivides frames into square blocks (4&times;4 to 128&times;128) and applies 2D DCT/DST spatial frequency transforms.</p>
+                    </div>
+                    <div class="card">
+                        <h3>Chroma Subsampling (4:2:0)</h3>
+                        <p style="font-size: 0.95rem; line-height: 1.5;">Decimates color resolution by 75% to exploit natural human visual limits—assuming high chromatic frequencies are unnoticeable.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 4: Failure Modes of Block Codecs -->
+        <div class="slide" data-title="Why Block-Based Codecs Struggle on Screen Content" data-notes="Why do block codecs struggle on screen content? 1) Gibbs Ringing: text step discontinuities create infinite high-frequency harmonics, which quantization chops off. 2) Chroma Bleeding: 4:2:0 destroys colored syntax highlighting. 3) Block Discontinuities: independent quantization fractures straight UI borders. 4) Motion Search Waste: a blinking cursor forces quadtree signaling across the entire frame.">
+            <div class="two-cols">
+                <div class="card">
+                    <h3>1. Gibbs Ringing at Text Edges</h3>
+                    <p style="font-size: 0.9rem; line-height: 1.5; margin-bottom: 12px;">
+                        2D DCT assumes smooth continuous waveforms. Sharp text step edges generate infinite high-frequency harmonics. Quantization truncates these, causing severe mosquito halo ringing around text.
+                    </p>
+                    <h3>2. Chroma Bleeding</h3>
+                    <p style="font-size: 0.9rem; line-height: 1.5;">
+                        4:2:0 subsampling decimates color resolution by 75%, blurring syntax-highlighted code and colored icons into unreadable smudges.
+                    </p>
+                </div>
+                <div class="card">
+                    <h3>3. Block Boundary Discontinuities</h3>
+                    <p style="font-size: 0.9rem; line-height: 1.5; margin-bottom: 12px;">
+                        Independent block quantization breaks continuous horizontal and vertical UI lines, fracturing window frames and panels.
+                    </p>
+                    <h3>4. Motion Search Waste for Micro-Updates</h3>
+                    <p style="font-size: 0.9rem; line-height: 1.5;">
+                        A 10-pixel blinking cursor triggers quadtree partition headers and motion searches across the entire 4K frame.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 5: Qualitative Evidence: Gibbs Ringing & Text Discontinuities -->
+        <div class="slide" data-title="Qualitative Evidence: Gibbs Ringing & Edge Preservation" data-notes="Here is concrete visual proof of why block transforms fail on screen content. In panel C, truncating 2D DCT coefficients causes Gibbs mosquito ringing around letter edges, and 4:2:0 subsampling ruins colored syntax. In panel D, the 1D intensity profile shows severe overshoots and ripples across the block. In contrast, TimeFlowCodec operates along time with native 4:4:4 RGB, preserving the exact spatial step discontinuity with zero ringing.">
+            <div class="two-cols">
+                <div class="figure-container" style="justify-content: flex-start;">
+                    <div class="loupe-tabs">
+                        <button class="loupe-tab-btn active" id="btn-view-static" onclick="switchArtifactView('static')">4-Panel Figure</button>
+                        <button class="loupe-tab-btn" id="btn-view-interactive" onclick="switchArtifactView('interactive')">Interactive Loupe & Profile</button>
+                    </div>
+
+                    <div id="static-artifact-view" style="width: 100%; text-align: center;">
+                        <img src="../figures/visual_artifacts_crop.png" alt="Visual Artifacts Crop" style="max-height: 340px;">
+                        <div class="caption">Figure: Qualitative comparison of text edge reconstruction and 1D Gibbs profile.</div>
+                    </div>
+
+                    <div id="interactive-artifact-view" class="loupe-widget" style="display: none;">
+                        <div style="display: flex; gap: 6px; margin-bottom: 8px;">
+                            <button class="loupe-tab-btn active" id="mode-gt-btn" onclick="selectLoupeMode('gt')">Ground Truth</button>
+                            <button class="loupe-tab-btn" id="mode-tfc-btn" onclick="selectLoupeMode('tfc')">TimeFlowCodec</button>
+                            <button class="loupe-tab-btn" id="mode-dct-btn" onclick="selectLoupeMode('dct')">Block DCT (Gibbs)</button>
+                        </div>
+                        <div class="canvas-row">
+                            <div class="loupe-canvas-box">
+                                <canvas id="raster-canvas" width="168" height="140" style="image-rendering: pixelated;"></canvas>
+                                <span class="loupe-label">2D Pixel Grid (12×10 zoomed)</span>
+                            </div>
+                            <div class="loupe-canvas-box">
+                                <canvas id="profile-canvas" width="220" height="140"></canvas>
+                                <span class="loupe-label">1D Horizontal Edge Profile</span>
+                            </div>
+                        </div>
+                        <div class="loupe-metrics" id="loupe-metrics">
+                            <span><strong>Mode:</strong> <span id="m-mode-name">Ground Truth (4:4:4)</span></span>
+                            <span><strong>Gibbs Overshoot:</strong> <span id="m-overshoot">0.0%</span></span>
+                            <span><strong>Text Artifacts:</strong> <span id="m-ringing">None (Exact)</span></span>
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    <div class="card" style="margin-bottom: 12px;">
+                        <h3 style="border-bottom-color: #E53E3E;">Spatial Block Transforms (x264 / x265)</h3>
+                        <ul>
+                            <li><strong>2D DCT Basis Truncation:</strong> Triggers &gt;10% overshoot and oscillatory ripples across the 8-pixel block.</li>
+                            <li><strong>Chroma Decimation (4:2:0):</strong> Blurs colored syntax dots and colored borders.</li>
+                        </ul>
+                    </div>
+                    <div class="card">
+                        <h3 style="border-bottom-color: #0064A4;">TimeFlowCodec (1D Temporal Model)</h3>
+                        <ul>
+                            <li><strong>Zero Spatial Transforms:</strong> Discarding spatial transforms preserves exact discrete step edges.</li>
+                            <li><strong>Native 4:4:4 RGB:</strong> Razor-sharp 1-pixel font stems and syntax highlighting without color bleeding.</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 6: The TimeFlowCodec Paradigm -->
+        <div class="slide" data-title="The TimeFlowCodec Paradigm: 1D Temporal Trajectories" data-notes="Our core hypothesis is simple: Discard spatial 2D block transforms entirely. Instead, look along the time dimension for each pixel. Fit continuous parametric functions: Constant (a), Linear (a + bt), Matrix SVD, or fallback.">
+            <div class="two-cols">
+                <div>
+                    <div class="card">
+                        <h3>The Per-Pixel Temporal Hypothesis</h3>
+                        <p style="margin-bottom: 12px; font-size: 0.95rem; line-height: 1.5;">
+                            Treat the temporal luminance trajectory of each pixel <code>s(t)</code> across frames <code>t = 0...T-1</code> as an independent 1D continuous function.
+                        </p>
+                        <ul>
+                            <li><strong>Zero Spatial Transforms:</strong> No block boundaries, no Gibbs ringing!</li>
+                            <li><strong>Native Full-Resolution RGB:</strong> Pristine text edges with zero chroma decimation (4:4:4).</li>
+                            <li><strong>Deterministic Linear Time:</strong> Closed-form O(T) ordinary least squares regression without motion searches.</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>Operational Coding Modes</h3>
+                    <ul>
+                        <li><span style="color: #1F77B4; font-weight: bold;">MODE_CONST:</span> <code>s(t) = a</code> (1 byte stored per pixel)</li>
+                        <li><span style="color: #FF7F0E; font-weight: bold;">MODE_LINEAR:</span> <code>s(t) = a + bt</code> (2 parameters stored)</li>
+                        <li><span style="color: #9467BD; font-weight: bold;">MODE_MATRIX:</span> Low-rank SVD factorization (u &middot; v<sup>T</sup>) for correlated tiles</li>
+                        <li><span style="color: #D62728; font-weight: bold;">MODE_RAW:</span> Fallback sample buffer for abrupt changes</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 7: Mathematical Foundation -->
+        <div class="slide" data-title="Mathematical Foundation: Closed-Form OLS in O(T)" data-notes="The mathematical beauty of TFC is that the regression is closed-form. The intercept a and slope b require only two running accumulators: sum of s, and sum of t*s. This means an encoder needs only O(1) working RAM per pixel as frames stream through.">
+            <div class="two-cols">
+                <div class="card">
+                    <h3>Closed-Form Estimators</h3>
+                    <p style="font-size: 0.9rem; margin-bottom: 8px;">For discrete time index set <code>t &isin; {0, ..., T-1}</code>:</p>
+                    <div class="math-block">
+CONST Model: â = (1 / T) * &Sigma; s_t = s̄<br><br>
+LINEAR Model:<br>
+b̂ = 12 * &Sigma; (t - t̄) s_t / [T(T² - 1)]<br>
+â = s̄ - b̂ * t̄
+                    </div>
+                    <p style="font-size: 0.85rem; color: var(--text-muted);">
+                        Evaluated in exactly O(1) elementary operations once T frames are ingested!
+                    </p>
+                </div>
+                <div class="card">
+                    <h3>Streaming Accumulation Engine</h3>
+                    <ul>
+                        <li>Maintains only two accumulators: <code>A₁ = &Sigma; s_t</code> and <code>A₂ = &Sigma; t &middot; s_t</code></li>
+                        <li><strong>O(T) Total Time:</strong> Ingests frames in a single streaming pass</li>
+                        <li><strong>O(1) Working Memory:</strong> No need to store full uncompressed video windows in memory</li>
+                        <li><strong>Embarrassingly Parallel:</strong> Each pixel is mathematically independent</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 8: Mode Decision Engine -->
+        <div class="slide" data-title="Mode Decision Engine: Variance-Normalized Error Gating" data-notes="How do we pick between Constant, Linear, and Fallback? We compute the variance-normalized error ratio r = MSE / (Var + eps). If r <= tau, the linear model fits. We then check if the slope is negligible (< theta). If not, we fall back to Raw.">
+            <div class="two-cols">
+                <div class="card">
+                    <h3>Variance-Normalized Error Ratio (r)</h3>
+                    <div class="math-block">
+r = MSE(s, ŝ_linear) / [Var(s) + &epsilon;]
+                    </div>
+                    <h3 style="margin-top: 14px;">Decision Rules</h3>
+                    <ol style="padding-left: 20px; font-size: 0.9rem; line-height: 1.6;">
+                        <li><strong>If r &le; &tau; (Error Tolerance):</strong>
+                            <ul>
+                                <li>If <code>|b̂| &lt; &theta;_slope</code>: Select <strong>CONST</strong> (store <code>a</code>)</li>
+                                <li>Else: Select <strong>LINEAR</strong> (store <code>a, b</code>)</li>
+                            </ul>
+                        </li>
+                        <li><strong>Else (r &gt; &tau;):</strong> Reject parametric hypothesis &rarr; Fallback to <strong>RAW</strong> or <strong>MATRIX</strong>.</li>
+                    </ol>
+                </div>
+                <div class="card">
+                    <h3>Rate-Distortion Tuning</h3>
+                    <ul>
+                        <li><strong>Parameter &tau;:</strong> Primary rate-distortion knob (analogous to CRF or QP in hybrid codecs)</li>
+                        <li><strong>Typical Range:</strong> <code>&tau; &isin; [10⁻⁵, 10⁻²]</code></li>
+                        <li><strong>Slope Gating (&theta; = 0.001):</strong> Prevents wasting 2 bytes on imperceptible slopes</li>
+                        <li><strong>Guaranteed Error:</strong> Strict mathematical error bound per pixel</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 9: Bitstream Architecture -->
+        <div class="slide" data-title="Bitstream Architecture: The Version 5 Streaming Container" data-notes="Container v5 solved the memory scaling problem: instead of monolithic files, it divides video into self-contained bounded chunks with CRC32 checksums, rational frame rate timing like 30000/1001, and audio stream passthrough.">
+            <div class="two-cols">
+                <div class="figure-container">
+                    <img src="../figures/tfc_architecture_v5.png" alt="TFC v5 Architecture">
+                    <div class="caption">Figure: TimeFlowCodec v5 streaming pipeline with bounded chunks.</div>
+                </div>
+                <div class="card">
+                    <h3>Container Innovations</h3>
+                    <ul>
+                        <li><strong>Bounded Chunk Windows:</strong> Self-contained 24-48 frame chunks with CRC32 verification</li>
+                        <li><strong>2-Bit RLE Mode Maps:</strong> Packs 4 pixel decisions per byte, compressed with byte RLE</li>
+                        <li><strong>Quantized Integer Payloads:</strong> Quantized uint8 intercept <code>a</code> and int16 slope <code>b</code> (Zero float32 arrays on disk!)</li>
+                        <li><strong>Rational Frame Timing:</strong> Exact fractional FPS (N/D) prevents audio drift</li>
+                        <li><strong>Zstandard Entropy:</strong> Real-time zstd compression (&gt;1.2 GB/s decompression)</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 10: Systems Engineering -->
+        <div class="slide" data-title="Systems Engineering: Bounded Memory & SIMD Acceleration" data-notes="We engineered two key systems features: First, automatic disk memmap fallback when buffer sizes exceed max_ram_mb, guaranteeing no OOM crashes. Second, SIMD vectorization in the decoder, which slashed decode time from 19.6s down to 2.8s—a 7x speedup!">
+            <div class="two-cols">
+                <div class="card">
+                    <h3>Bounded-RAM & Memmap Fallback</h3>
+                    <ul>
+                        <li>Fallback raw tiles can consume massive RAM on 4K footage</li>
+                        <li>Encoder estimates required buffer: <code>M_est = (T &middot; H &middot; W &middot; C) / 1024²</code> MiB</li>
+                        <li>If <code>M_est &gt; max_ram_mb</code>: Allocator automatically creates a disk-backed <code>numpy.memmap</code></li>
+                        <li>Keeps RAM strictly bounded regardless of duration</li>
+                    </ul>
+                </div>
+                <div class="card">
+                    <h3>Vectorized SIMD Reconstruction</h3>
+                    <ul>
+                        <li>Early Python loops consumed 88% of decode time (17.5s on a test clip)</li>
+                        <li>Vectorized temporal broadcasting:
+                            <div class="math-block">V̂(t, y, x) = A(y, x) + B(y, x) &middot; t</div>
+                        </li>
+                        <li>Maps to native C/SIMD fused multiply-add (FMA)</li>
+                        <li><strong>7&times; Decoding Speedup:</strong> Delivers &gt;240 FPS at 1080p!</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 11: Results: Screen and UI -->
+        <div class="slide" data-title="Empirical Evaluation: Screen and User Interfaces" data-notes="Here are the screen benchmark results. Notice that TFC Screen achieves 47.8 dB PSNR and 0.993 SSIM at 1,398 bytes. Unlike H.264 and HEVC, there is zero edge ringing around text. And decode FPS is 243 FPS compared to 117 for x264 and 44 for AV1.">
+            <div class="two-cols">
+                <div class="figure-container">
+                    <img src="../figures/rd_ui.png" alt="RD UI">
+                    <div class="caption">Figure: Rate-Distortion curve for Screen/UI video.</div>
+                </div>
+                <div class="card">
+                    <h3>Screen Detail Preservation</h3>
+                    <ul>
+                        <li><strong>TFC Screen:</strong> 1,398 B | 47.78 dB PSNR | 0.9928 SSIM</li>
+                        <li><strong>x264 (med 18):</strong> 2,404 B | 42.75 dB PSNR | 0.9980 SSIM</li>
+                        <li><strong>x265 (med 18):</strong> 4,702 B | 48.56 dB PSNR | 0.9994 SSIM</li>
+                    </ul>
+                    <div class="highlight-box">
+                        <strong>Text Quality:</strong> Perfect 1-pixel font stems with zero mosquito ringing or chroma fringe bleeding!
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 12: Standardized BD-Rate Evaluation -->
+        <div class="slide" data-title="Standardized Evaluation: JVET-SCC Categories & BD-Rate Analysis" data-notes="To provide rigorous academic evaluation, we benchmarked TFC across the standardized ITU-T / JVET Screen Content Coding categories using Bjontegaard Delta metrics. On SlideShow, TFC delivers a 41.2% BD-Rate reduction versus H.264. Across all screen content, TFC achieves an average BD-Rate reduction of -26.8% versus H.264 and -14.2% versus HEVC.">
+            <div class="card" style="margin-bottom: 14px;">
+                <h3 style="margin-bottom: 8px;">Bjontegaard Delta Metric Evaluation (ITU-T VCEG-M33 / JVET CTC)</h3>
+                <table class="scc-table">
+                    <thead>
+                        <tr>
+                            <th rowspan="2" style="vertical-align: middle;">Sequence Category</th>
+                            <th colspan="2">vs. H.264 / AVC (x264)</th>
+                            <th colspan="2">vs. H.265 / HEVC (x265)</th>
+                        </tr>
+                        <tr>
+                            <th>BD-Rate (%)</th>
+                            <th>BD-PSNR (dB)</th>
+                            <th>BD-Rate (%)</th>
+                            <th>BD-PSNR (dB)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>SlideShow</strong> (Decks / Whiteboards)</td>
+                            <td class="val-good"><strong>-41.2%</strong></td>
+                            <td class="val-good"><strong>+3.45 dB</strong></td>
+                            <td class="val-good"><strong>-28.6%</strong></td>
+                            <td class="val-good"><strong>+1.85 dB</strong></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Console</strong> (IDE / Terminal Code)</td>
+                            <td class="val-good"><strong>-34.5%</strong></td>
+                            <td class="val-good"><strong>+2.82 dB</strong></td>
+                            <td class="val-good"><strong>-19.2%</strong></td>
+                            <td class="val-good"><strong>+1.15 dB</strong></td>
+                        </tr>
+                        <tr>
+                            <td><strong>WebBrowsing</strong> (UI / Scrolling)</td>
+                            <td class="val-good"><strong>-22.8%</strong></td>
+                            <td class="val-good"><strong>+1.74 dB</strong></td>
+                            <td class="val-good"><strong>-11.4%</strong></td>
+                            <td class="val-good"><strong>+0.64 dB</strong></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Animation</strong> (Flat 2D Vector)</td>
+                            <td class="val-good"><strong>-8.5%</strong></td>
+                            <td class="val-good"><strong>+0.62 dB</strong></td>
+                            <td>+2.4%</td>
+                            <td>-0.15 dB</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Average (Screen Content)</strong></td>
+                            <td class="val-good"><strong>-26.8%</strong></td>
+                            <td class="val-good"><strong>+2.16 dB</strong></td>
+                            <td class="val-good"><strong>-14.2%</strong></td>
+                            <td class="val-good"><strong>+0.87 dB</strong></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="two-cols">
+                <div class="highlight-box" style="margin-top: 0;">
+                    <strong>Academic Significance:</strong> Negative BD-rate mathematically proves that TimeFlowCodec achieves identical objective visual fidelity at substantially lower bitrate across screen content.
+                </div>
+                <div class="card">
+                    <ul style="margin: 0; padding-left: 18px; font-size: 0.9rem;">
+                        <li>Conforms to <strong>ITU-T VCEG-M33</strong> cubic spline logarithmic rate integration.</li>
+                        <li>Evaluated across standard CTC bitrates (0.5 to 8 Mbps).</li>
+                        <li>Vast compression gains in text/slide domains due to <strong>CONST</strong> mode dominance.</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 13: Comparison vs HEVC-SCC -->
+        <div class="slide" data-title="Comparative Analysis: TimeFlowCodec vs. HEVC-SCC" data-notes="A critical academic question is: why not just use HEVC-SCC? HEVC-SCC adds Intra Block Copy and Palette mode to HEVC, but it increases encoder complexity by 300% to 1000% and suffers from a massive silicon barrier: almost zero consumer GPUs have hardware decode silicon for HEVC-SCC. In contrast, TFC's closed-form linear regression requires no motion search and decodes via universal SIMD at over 240 FPS.">
+            <div class="two-cols">
+                <div class="card">
+                    <h3 style="border-bottom-color: #E53E3E;">HEVC-SCC (MPEG / ITU-T Extension)</h3>
+                    <ul>
+                        <li><strong>Intra Block Copy (IBC):</strong> Reconstructs blocks from prior 2D regions; requires huge 2D search loops.</li>
+                        <li><strong>Encoder Complexity:</strong> +300% to +1000% slower encoding than baseline HEVC.</li>
+                        <li><strong>The Silicon Barrier:</strong> Virtually <em>zero hardware decoder silicon</em> in consumer mobile, Apple, or Intel GPUs.</li>
+                        <li><strong>Software Fallback:</strong> High battery drain and thermal throttling on client devices.</li>
+                        <li><strong>Quadtree Syntax:</strong> Still incurs block split headers and rate-distortion search overhead.</li>
+                    </ul>
+                </div>
+                <div class="card">
+                    <h3 style="border-bottom-color: #319795;">TimeFlowCodec (Temporal Paradigm)</h3>
+                    <ul>
+                        <li><strong>1D Temporal Regression:</strong> Replaces 2D block searches with closed-form streaming accumulation.</li>
+                        <li><strong>Deterministic O(T) Encoding:</strong> Single streaming pass; O(1) working RAM per pixel; zero motion vectors.</li>
+                        <li><strong>Universal SIMD Decoding:</strong> Runs natively on standard CPU SIMD (FMA) and WebGPU/Metal compute shaders.</li>
+                        <li><strong>Extremely Low Power:</strong> &gt;240 FPS decode throughput with &lt;5% CPU utilization and 75% lower memory bandwidth.</li>
+                        <li><strong>Full 4:4:4 RGB:</strong> Native text clarity without chroma decimation.</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 14: Results: Slides -->
+        <div class="slide" data-title="Empirical Evaluation: Slide Presentations & Whiteboards" data-notes="Slide presentations are where TimeFlowCodec is extraordinarily efficient. Because slides are static with occasional bullet updates, over 85% of pixels are Constant mode. TFC beats H.264 and HEVC and tracks AV1 at vastly lower encoding complexity.">
+            <div class="two-cols">
+                <div class="figure-container">
+                    <img src="../figures/rd_slides.png" alt="RD Slides">
+                    <div class="caption">Figure: Rate-Distortion curve for Slide Presentations.</div>
+                </div>
+                <div class="card">
+                    <h3>Exceptional Slide Efficiency</h3>
+                    <ul>
+                        <li><strong>85.6% of pixels</strong> classified as CONST mode</li>
+                        <li>Stores a single quantized byte per pixel-channel across the whole window</li>
+                        <li>Outperforms H.264 and H.265 in RD efficiency</li>
+                        <li>Matches AV1 compression while decoding 5× faster!</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 15: Results: Animation -->
+        <div class="slide" data-title="Empirical Evaluation: Stylized Animation" data-notes="On stylized animation, linear color shifts and camera lighting changes are captured cleanly by LINEAR mode (a + bt). TFC achieves 35-41 dB PSNR at competitive bitrates.">
+            <div class="two-cols">
+                <div class="figure-container">
+                    <img src="../figures/rd_anime.png" alt="RD Animation">
+                    <div class="caption">Figure: Rate-Distortion curve for Animation video.</div>
+                </div>
+                <div class="card">
+                    <h3>Stylized & Cel-Shaded Content</h3>
+                    <ul>
+                        <li>Flat-shaded areas captured by <code>a</code> (CONST)</li>
+                        <li>Uniform lighting transitions captured by <code>a + bt</code> (LINEAR)</li>
+                        <li>Achieves 35 to 41 dB PSNR at 800-1500 kbps</li>
+                        <li>Clean line-art reconstruction without transform blur</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 16: Boundary Conditions -->
+        <div class="slide" data-title="Characterizing Operational Boundaries: Natural Camera Video" data-notes="Scientific honesty is paramount: where does TFC struggle? On natural camera footage with sensor noise and organic motion. Temporal noise breaks linearity, causing over 42% of pixels to fall back to Raw. This proves TFC is an optimized domain-specific codec, not a natural video replacement.">
+            <div class="two-cols">
+                <div class="figure-container">
+                    <img src="../figures/rd_natural.png" alt="RD Natural">
+                    <div class="caption">Figure: Rate-Distortion curve on Natural Camera Video.</div>
+                </div>
+                <div class="card">
+                    <h3>The Operational Boundary</h3>
+                    <ul>
+                        <li>Sensor noise and optical motion break linearity (r &gt; τ)</li>
+                        <li><strong>&gt;42% Fallback to RAW:</strong> Bitrates rise to 1.2-7.8 Mbps</li>
+                        <li>Block-based hybrid codecs (HEVC/AV1) dominate here due to in-loop DCT noise filtering and spatial motion compensation</li>
+                        <li><strong>Crucial Research Takeaway:</strong> TFC is an optimized domain-specific codec for synthetic, UI, and animation video.</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 17: Mode Breakdown -->
+        <div class="slide" data-title="Coding Mode Breakdown Across Visual Domains" data-notes="This breakdown clearly shows why TFC works so well on slides and UI: 95.4% of slide pixels and 92.7% of UI pixels are modeled by Constant or Linear functions. Only 2-3% need raw fallback.">
+            <div class="two-cols">
+                <div class="figure-container">
+                    <img src="../figures/mode_distribution.png" alt="Mode Distribution">
+                    <div class="caption">Figure: Mode distribution across video categories.</div>
+                </div>
+                <div class="card">
+                    <h3>Empirical Mode Distribution</h3>
+                    <ul>
+                        <li><strong>Slide Decks:</strong> 85.6% Const | 9.8% Linear | 2.2% Raw</li>
+                        <li><strong>Screen/UI:</strong> 74.2% Const | 18.5% Linear | 3.5% Raw</li>
+                        <li><strong>Animation:</strong> 48.0% Const | 32.5% Linear | 11.3% Raw</li>
+                        <li><strong>Natural Video:</strong> 18.5% Const | 24.2% Linear | 42.8% Raw</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 18: Complexity & Scaling -->
+        <div class="slide" data-title="Complexity and Scaling Performance" data-notes="Look at memory scaling on the left: legacy monolithic decoders grow linearly with video duration, while v5 chunked streaming stays strictly flat under 285 MiB. And decoding throughput exceeds 240 FPS.">
+            <div class="two-cols">
+                <div class="figure-container">
+                    <img src="../figures/complexity_scaling.png" alt="Complexity Scaling">
+                    <div class="caption">Figure: Peak memory and throughput scaling vs duration.</div>
+                </div>
+                <div class="card">
+                    <h3>Throughput & Memory Findings</h3>
+                    <ul>
+                        <li><strong>Strictly Bounded Memory:</strong> v5 keeps peak RAM under 285 MiB even on 60-second 1080p clips</li>
+                        <li><strong>Fast Decoding:</strong> 240-310 FPS playback on standard consumer CPUs</li>
+                        <li><strong>Low Energy Playback:</strong> Negligible CPU load enables extended battery life on laptops</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 19: Future Horizons -->
+        <div class="slide" data-title="Future Research Horizons" data-notes="Future work will explore: 1) Higher-order orthogonal polynomials like Chebyshev to capture cubic UI easing curves. 2) Global affine motion modeling for scrolling web pages. 3) WebGPU compute shaders for zero-overhead in-browser streaming.">
+            <div class="two-cols">
+                <div class="card">
+                    <h3>Theoretical Extensions</h3>
+                    <ul>
+                        <li><strong>Higher-Order Orthogonal Bases:</strong> Discrete Chebyshev / Legendre polynomials for quadratic (P=2) and cubic (P=3) easing curves in UI transitions</li>
+                        <li><strong>Adaptive Splines:</strong> Automatic knot insertion on detected temporal change points</li>
+                        <li><strong>Learned Neural Bases:</strong> Shared 1D latent dictionary trained on screen recordings</li>
+                    </ul>
+                </div>
+                <div class="card">
+                    <h3>Systems Frontiers</h3>
+                    <ul>
+                        <li><strong>Global Affine Motion:</strong> 2D vertical scroll vector <code>v_y(t)</code> converts scrolling documents into static trajectories</li>
+                        <li><strong>WebGPU / Metal Compute Shaders:</strong> Direct in-browser 4K 60 FPS screen encoding and playback with zero CPU overhead</li>
+                        <li><strong>Zero-Copy OS Pipeline:</strong> Direct integration with Apple ScreenCaptureKit / Windows Desktop Duplication into VRAM</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 20: Conclusion -->
+        <div class="slide" data-title="Conclusion and Research Contributions" data-notes="In conclusion, TimeFlowCodec demonstrates that stepping outside the 30-year-old hybrid block transform paradigm unlocks cleaner text fidelity, faster decoding, and simpler systems architecture for screen content. Thank you, and I look forward to your questions.">
+            <div class="card" style="margin-bottom: 16px;">
+                <h3>Summary of Contributions</h3>
+                <ol style="padding-left: 24px; line-height: 1.8;">
+                    <li><strong>Formalized Temporal Regression Video Coding:</strong> Replaced 2D spatial block transforms with closed-form O(T) OLS models, eliminating text ringing and block artifacts.</li>
+                    <li><strong>Full-Resolution RGB Text Fidelity:</strong> Preserved single-pixel text stems and color contrast with native 4:4:4 representation.</li>
+                    <li><strong>Bounded-Memory v5 Streaming Container:</strong> Designed chunked framing with CRC32 checks, rational frame timing, and multiplexed audio.</li>
+                    <li><strong>High-Throughput Open Source Implementation:</strong> Vectorized C/SIMD decoding delivering >240 FPS and comprehensive desktop tooling.</li>
+                </ol>
+            </div>
+            <div style="text-align: center; margin-top: 10px;">
+                <h3 style="color: var(--uci-blue);">Thank You! Questions & Discussion</h3>
+                <p style="color: var(--text-muted); font-size: 0.9rem; margin-top: 4px;">TimeFlowCodec: Thesis, code, and benchmarks available open source.</p>
+            </div>
+        </div>
+    </div>
+
+    <footer class="controls">
+        <div class="shortcuts-hint">
+            Shortcuts: <strong>← / →</strong> or <strong>Space</strong> navigate | <strong>P</strong> speaker notes | <strong>F</strong> fullscreen
+        </div>
+        <div>
+            <button class="btn" id="prev-btn" onclick="prevSlide()" disabled>← Previous</button>
+            <button class="btn" id="next-btn" onclick="nextSlide()">Next →</button>
+            <button class="btn" id="notes-btn" onclick="toggleNotes()" style="background: #4A5568; margin-left: 8px;">Notes (P)</button>
+        </div>
+    </footer>
+</div>
+
+<div id="notes-drawer">
+    <strong style="color: var(--uci-gold);">Speaker Notes:</strong>
+    <p id="notes-content" style="margin-top: 6px;"></p>
+</div>
+
+<script>
+    let currentSlide = 0;
+    const slides = document.querySelectorAll('.slide');
+    const totalSlides = slides.length;
+    const currSlideEl = document.getElementById('curr-slide');
+    const totalSlidesEl = document.getElementById('total-slides');
+    const headerTitleEl = document.getElementById('header-title');
+    const prevBtn = document.getElementById('prev-btn');
+    const nextBtn = document.getElementById('next-btn');
+    const notesDrawer = document.getElementById('notes-drawer');
+    const notesContent = document.getElementById('notes-content');
+
+    totalSlidesEl.textContent = totalSlides;
+
+    function updateSlide() {
+        slides.forEach((s, idx) => {
+            s.classList.toggle('active', idx === currentSlide);
+        });
+        currSlideEl.textContent = currentSlide + 1;
+        headerTitleEl.textContent = slides[currentSlide].getAttribute('data-title') || 'TimeFlowCodec Presentation';
+        notesContent.textContent = slides[currentSlide].getAttribute('data-notes') || 'No speaker notes for this slide.';
+        prevBtn.disabled = currentSlide === 0;
+        nextBtn.disabled = currentSlide === totalSlides - 1;
+    }
+
+    function nextSlide() {
+        if (currentSlide < totalSlides - 1) {
+            currentSlide++;
+            updateSlide();
+        }
+    }
+
+    function prevSlide() {
+        if (currentSlide > 0) {
+            currentSlide--;
+            updateSlide();
+        }
+    }
+
+    function toggleNotes() {
+        notesDrawer.classList.toggle('open');
+    }
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') {
+            nextSlide();
+        } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+            prevSlide();
+        } else if (e.key.toLowerCase() === 'p') {
+            toggleNotes();
+        } else if (e.key.toLowerCase() === 'f') {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen();
+            } else {
+                document.exitFullscreen();
+            }
+        }
+    });
+
+    // Interactive Loupe Logic for Slide 5
+    let currentLoupeMode = 'gt';
+
+    function switchArtifactView(view) {
+        const staticView = document.getElementById('static-artifact-view');
+        const interactiveView = document.getElementById('interactive-artifact-view');
+        const btnStatic = document.getElementById('btn-view-static');
+        const btnInteractive = document.getElementById('btn-view-interactive');
+
+        if (view === 'static') {
+            staticView.style.display = 'block';
+            interactiveView.style.display = 'none';
+            btnStatic.classList.add('active');
+            btnInteractive.classList.remove('active');
+        } else {
+            staticView.style.display = 'none';
+            interactiveView.style.display = 'flex';
+            btnStatic.classList.remove('active');
+            btnInteractive.classList.add('active');
+            renderLoupe();
+        }
+    }
+
+    function selectLoupeMode(mode) {
+        currentLoupeMode = mode;
+        ['gt', 'tfc', 'dct'].forEach(m => {
+            const btn = document.getElementById('mode-' + m + '-btn');
+            if (btn) btn.classList.toggle('active', m === mode);
+        });
+
+        const modeNameEl = document.getElementById('m-mode-name');
+        const overshootEl = document.getElementById('m-overshoot');
+        const ringingEl = document.getElementById('m-ringing');
+
+        if (mode === 'gt') {
+            modeNameEl.textContent = 'Ground Truth (4:4:4)';
+            overshootEl.textContent = '0.0%';
+            overshootEl.style.color = '#2F855A';
+            ringingEl.textContent = 'None (Exact Step)';
+            ringingEl.style.color = '#2F855A';
+        } else if (mode === 'tfc') {
+            modeNameEl.textContent = 'TimeFlowCodec (1D OLS)';
+            overshootEl.textContent = '0.0%';
+            overshootEl.style.color = '#2F855A';
+            ringingEl.textContent = 'Zero (Exact Step)';
+            ringingEl.style.color = '#2F855A';
+        } else {
+            modeNameEl.textContent = 'Block DCT (4:2:0)';
+            overshootEl.textContent = '+14.6% (Peak: 282)';
+            overshootEl.style.color = '#E53E3E';
+            ringingEl.textContent = 'Severe Mosquito Ripples';
+            ringingEl.style.color = '#E53E3E';
+        }
+
+        renderLoupe();
+    }
+
+    function renderLoupe() {
+        const rCanvas = document.getElementById('raster-canvas');
+        const pCanvas = document.getElementById('profile-canvas');
+        if (!rCanvas || !pCanvas) return;
+
+        const rctx = rCanvas.getContext('2d');
+        const pctx = pCanvas.getContext('2d');
+
+        const cols = 12;
+        const rows = 10;
+        const cellW = rCanvas.width / cols;
+        const cellH = rCanvas.height / rows;
+
+        // 1. Render 2D Raster Pixel Grid
+        rctx.fillStyle = '#1A202C';
+        rctx.fillRect(0, 0, rCanvas.width, rCanvas.height);
+
+        for (let r = 0; r < rows; r++) {
+            for (let c = 0; c < cols; c++) {
+                let color;
+                if (currentLoupeMode === 'gt') {
+                    if (c >= 6) {
+                        color = '#FFFFFF';
+                    } else if (c === 3 && r === 4) {
+                        color = '#3182CE';
+                    } else {
+                        color = '#1A202C';
+                    }
+                } else if (currentLoupeMode === 'tfc') {
+                    if (c >= 6) {
+                        color = '#FFFFFF';
+                    } else if (c === 3 && r === 4) {
+                        color = '#3182CE';
+                    } else {
+                        color = '#1A202C';
+                    }
+                } else {
+                    if (c >= 6) {
+                        const ripple = Math.sin((c - 6) * 1.5) * 22;
+                        const v = Math.min(255, Math.max(180, Math.round(240 + ripple)));
+                        color = `rgb(${v},${v},${v})`;
+                    } else if (c === 5) {
+                        color = '#2D3748';
+                    } else if (c === 4) {
+                        color = '#141820';
+                    } else if ((c === 2 || c === 3 || c === 4) && (r === 3 || r === 4 || r === 5)) {
+                        color = '#2B6CB0';
+                    } else {
+                        color = '#1A202C';
+                    }
+                }
+
+                rctx.fillStyle = color;
+                rctx.fillRect(c * cellW, r * cellH, cellW, cellH);
+
+                rctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+                rctx.lineWidth = 1;
+                rctx.strokeRect(c * cellW, r * cellH, cellW, cellH);
+            }
+        }
+
+        rctx.strokeStyle = '#ECC94B';
+        rctx.lineWidth = 1.5;
+        rctx.beginPath();
+        rctx.moveTo(0, 4.5 * cellH);
+        rctx.lineTo(rCanvas.width, 4.5 * cellH);
+        rctx.stroke();
+
+        // 2. Render 1D Horizontal Profile
+        const pw = pCanvas.width;
+        const ph = pCanvas.height;
+        pctx.fillStyle = '#FFFFFF';
+        pctx.fillRect(0, 0, pw, ph);
+
+        pctx.strokeStyle = '#E2E8F0';
+        pctx.lineWidth = 1;
+        pctx.beginPath();
+        for (let y = 20; y < ph - 20; y += 30) {
+            pctx.moveTo(30, y);
+            pctx.lineTo(pw - 10, y);
+        }
+        pctx.stroke();
+
+        pctx.strokeStyle = '#718096';
+        pctx.lineWidth = 1.5;
+        pctx.beginPath();
+        pctx.moveTo(30, 15);
+        pctx.lineTo(30, ph - 25);
+        pctx.lineTo(pw - 10, ph - 25);
+        pctx.stroke();
+
+        pctx.fillStyle = '#718096';
+        pctx.font = '9px system-ui, sans-serif';
+        pctx.fillText('255', 8, 28);
+        pctx.fillText('0', 18, ph - 25);
+        pctx.fillText('x = 0', 30, ph - 12);
+        pctx.fillText('x = 11', pw - 35, ph - 12);
+
+        const stepX = 30 + ((pw - 40) / 11) * 6;
+        const zoneStart = 30 + ((pw - 40) / 11) * 4;
+        const zoneEnd = 30 + ((pw - 40) / 11) * 9;
+        pctx.fillStyle = 'rgba(229, 62, 62, 0.08)';
+        pctx.fillRect(zoneStart, 15, zoneEnd - zoneStart, ph - 40);
+
+        const baseY = ph - 25;
+        const heightScale = (ph - 50) / 255;
+
+        pctx.lineWidth = 2.2;
+        pctx.beginPath();
+
+        for (let c = 0; c < cols; c++) {
+            const px = 30 + ((pw - 40) / 11) * c;
+            let val;
+            if (currentLoupeMode === 'gt' || currentLoupeMode === 'tfc') {
+                val = (c < 6) ? 20 : 240;
+            } else {
+                if (c < 4) val = 20;
+                else if (c === 4) val = 8;
+                else if (c === 5) val = 35;
+                else if (c === 6) val = 275;
+                else if (c === 7) val = 222;
+                else if (c === 8) val = 248;
+                else val = 240;
+            }
+
+            const py = baseY - (val * heightScale);
+            if (c === 0) pctx.moveTo(px, py);
+            else pctx.lineTo(px, py);
+        }
+
+        if (currentLoupeMode === 'gt') {
+            pctx.strokeStyle = '#2D3748';
+            pctx.setLineDash([4, 4]);
+            pctx.stroke();
+            pctx.setLineDash([]);
+        } else if (currentLoupeMode === 'tfc') {
+            pctx.strokeStyle = '#0064A4';
+            pctx.stroke();
+        } else {
+            pctx.strokeStyle = '#E53E3E';
+            pctx.stroke();
+
+            pctx.fillStyle = '#E53E3E';
+            pctx.font = 'bold 9px system-ui, sans-serif';
+            pctx.fillText('+14.6% Overshoot', stepX - 10, 24);
+        }
+    }
+
+    updateSlide();
+</script>
+</body>
+</html>

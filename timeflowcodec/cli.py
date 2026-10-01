@@ -111,31 +111,86 @@ def compress_main(argv: list[str] | None = None) -> None:
         action="store_true",
         help="Enable block-matching motion compensation",
     )
+    parser.add_argument("--crf", type=float, default=None, help="Constant Rate Factor (0-63)")
+    parser.add_argument("--bitrate", type=str, default=None, help="Target bitrate (e.g. '2M', '800k')")
+    parser.add_argument(
+        "--tune",
+        type=str,
+        default=None,
+        choices=["screen", "anime", "natural"],
+        help="Content tuning: screen (zero halo), anime (yuv420), natural (motion comp)",
+    )
+    parser.add_argument("--rdo", action="store_true", help="Enable Lagrangian Rate-Distortion Optimization")
+    parser.add_argument("--lambda-rdo", type=float, default=None, help="Lagrangian multiplier for RDO")
+    parser.add_argument("--threads", type=int, default=1, help="Number of worker threads (0=auto)")
     parser.add_argument("--container-version", type=int, default=5, choices=[1, 2, 3, 4, 5])
     args = parser.parse_args(argv)
 
-    encode_video_to_tfc(
-        args.input,
-        args.output,
-        tau=args.tau,
-        slope_threshold=args.slope_threshold,
-        payload_comp_type=args.payload_comp_type,
-        container_version=args.container_version,
-        max_frames=args.max_frames,
-        window=args.window,
-        tiling=args.tiling,
-        max_ram_mb=args.max_ram_mb,
-        dtype=args.dtype,
-        colorspace=args.colorspace,
-        macbook_profile=args.macbook_profile,
-        scene_cut=args.scene_cut,
-        scene_threshold=args.scene_threshold,
-        matrix_mode=args.matrix_mode,
-        matrix_tau=args.matrix_tau,
-        matrix_rate_ratio=args.matrix_rate_ratio,
-        preset=args.preset,
-        motion_comp=args.motion_comp,
-    )
+    opts = _resolve_encode_options(args)
+    encode_video_to_tfc(args.input, args.output, **opts)
+
+
+def _resolve_encode_options(args: argparse.Namespace) -> dict:
+    tau = args.tau
+    slope_threshold = args.slope_threshold
+    preset = args.preset
+    colorspace = args.colorspace
+    motion_comp = args.motion_comp
+    rdo = getattr(args, "rdo", False)
+    lambda_rdo = getattr(args, "lambda_rdo", None)
+    threads = getattr(args, "threads", 1)
+
+    tune = getattr(args, "tune", None)
+    if tune:
+        if tune == "screen":
+            preset = "screen"
+            colorspace = "rgb"
+        elif tune == "anime":
+            preset = "anime"
+            colorspace = "yuv420"
+        elif tune == "natural":
+            preset = "general"
+            motion_comp = True
+
+    crf = getattr(args, "crf", None)
+    if crf is not None:
+        from .rate_control import crf_to_parameters
+
+        crf_params = crf_to_parameters(crf, tune=tune or "screen")
+        tau = crf_params["tau"]
+        slope_threshold = crf_params["slope_threshold"]
+        if rdo and lambda_rdo is None:
+            lambda_rdo = crf_params["lambda_rdo"]
+    elif getattr(args, "bitrate", None) is not None:
+        from .rate_control import parse_bitrate_string
+
+        target_kbps = parse_bitrate_string(args.bitrate)
+        est_tau = max(1e-5, min(0.05, 5.0 / max(target_kbps, 100.0)))
+        tau = est_tau
+
+    return {
+        "tau": tau,
+        "slope_threshold": slope_threshold,
+        "payload_comp_type": args.payload_comp_type,
+        "container_version": args.container_version,
+        "max_frames": args.max_frames,
+        "window": args.window,
+        "tiling": args.tiling,
+        "max_ram_mb": args.max_ram_mb,
+        "dtype": args.dtype,
+        "colorspace": colorspace,
+        "macbook_profile": args.macbook_profile,
+        "scene_cut": args.scene_cut,
+        "scene_threshold": args.scene_threshold,
+        "matrix_mode": args.matrix_mode,
+        "matrix_tau": args.matrix_tau,
+        "matrix_rate_ratio": args.matrix_rate_ratio,
+        "preset": preset,
+        "motion_comp": motion_comp,
+        "rdo": rdo,
+        "lambda_rdo": lambda_rdo,
+        "threads": threads,
+    }
 
 
 def decompress_main(argv: list[str] | None = None) -> None:
@@ -155,9 +210,16 @@ def decompress_main(argv: list[str] | None = None) -> None:
         dest="stream_output",
         help="Disable streaming decode and buffer full output in memory",
     )
+    parser.add_argument("--threads", type=int, default=1, help="Number of worker threads (0=auto)")
     args = parser.parse_args(argv)
 
-    decode_tfc_to_video(args.input, args.output, fps=args.fps, stream_output=args.stream_output)
+    decode_tfc_to_video(
+        args.input,
+        args.output,
+        fps=args.fps,
+        stream_output=args.stream_output,
+        threads=args.threads,
+    )
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -244,6 +306,18 @@ def main(argv: list[str] | None = None) -> None:
         action="store_true",
         help="Enable block-matching motion compensation",
     )
+    p_enc.add_argument("--crf", type=float, default=None, help="Constant Rate Factor (0-63)")
+    p_enc.add_argument("--bitrate", type=str, default=None, help="Target bitrate (e.g. '2M', '800k')")
+    p_enc.add_argument(
+        "--tune",
+        type=str,
+        default=None,
+        choices=["screen", "anime", "natural"],
+        help="Content tuning: screen (zero halo), anime (yuv420), natural (motion comp)",
+    )
+    p_enc.add_argument("--rdo", action="store_true", help="Enable Lagrangian Rate-Distortion Optimization")
+    p_enc.add_argument("--lambda-rdo", type=float, default=None, help="Lagrangian multiplier for RDO")
+    p_enc.add_argument("--threads", type=int, default=1, help="Number of worker threads (0=auto)")
 
     p_dec = sub.add_parser("decode", aliases=["decompress"], help="Decompress .tfc to video")
     p_dec.add_argument("input")
@@ -261,6 +335,7 @@ def main(argv: list[str] | None = None) -> None:
         dest="stream_output",
         help="Disable streaming decode and buffer full output in memory",
     )
+    p_dec.add_argument("--threads", type=int, default=1, help="Number of worker threads (0=auto)")
 
     args = parser.parse_args(argv)
 
@@ -269,30 +344,16 @@ def main(argv: list[str] | None = None) -> None:
         return
 
     if args.cmd in {"encode", "compress"}:
-        encode_video_to_tfc(
+        opts = _resolve_encode_options(args)
+        encode_video_to_tfc(args.input, args.output, **opts)
+    elif args.cmd in {"decode", "decompress"}:
+        decode_tfc_to_video(
             args.input,
             args.output,
-            tau=args.tau,
-            slope_threshold=args.slope_threshold,
-            payload_comp_type=args.payload_comp_type,
-            container_version=args.container_version,
-            max_frames=args.max_frames,
-            window=args.window,
-            tiling=args.tiling,
-            max_ram_mb=args.max_ram_mb,
-            dtype=args.dtype,
-            colorspace=args.colorspace,
-            macbook_profile=args.macbook_profile,
-            scene_cut=args.scene_cut,
-            scene_threshold=args.scene_threshold,
-            matrix_mode=args.matrix_mode,
-            matrix_tau=args.matrix_tau,
-            matrix_rate_ratio=args.matrix_rate_ratio,
-            preset=args.preset,
-            motion_comp=args.motion_comp,
+            fps=args.fps,
+            stream_output=args.stream_output,
+            threads=args.threads,
         )
-    elif args.cmd in {"decode", "decompress"}:
-        decode_tfc_to_video(args.input, args.output, fps=args.fps, stream_output=args.stream_output)
     else:
         parser.error("Specify 'encode'/'decode' (or 'compress'/'decompress').")
 

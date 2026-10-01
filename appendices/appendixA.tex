@@ -1,3 +1,63 @@
 \chapter{Algorithms and Pseudocode}
-This appendix outlines encoder/decoder flows and payload packing/unpacking in
-pseudo-code for reproducibility.
+\label{app:algorithms}
+
+In this appendix, we provide the algorithmic specification for the primary streaming encoding and decoding pipelines in TimeFlowCodec.
+
+\section{Streaming Temporal Regression Algorithm}
+The pseudocode below specifies the single-pass $\mathcal{O}(T)$ accumulation and closed-form parameter estimation for a spatial slice over $T$ frames.
+
+\begin{figure}[h]
+\centering
+\begin{minipage}{0.95\linewidth}
+\hrule \vspace{2mm}
+\textbf{Algorithm 1: Streaming 1D Temporal Least Squares Regression}
+\vspace{1mm} \hrule \vspace{3mm}
+\small
+\textbf{Require:} Sequence of frames $\{I_t\}_{t=0}^{T-1}$, tolerance threshold $\tau$, slope threshold $\theta_{\text{slope}}$ \\
+\textbf{Ensure:} Mode map $M(x, y)$, Intercepts $A(x, y)$, Slopes $B(x, y)$, Fallback buffer $F$
+
+\begin{enumerate}
+    \item Initialize accumulators $S_1(x, y) \leftarrow 0$, $S_2(x, y) \leftarrow 0$, $E_{\text{raw}}(x, y) \leftarrow 0$ for all $(x, y)$
+    \item \textbf{for} $t = 0$ \textbf{to} $T-1$ \textbf{do}
+    \begin{enumerate}
+        \item Ingest incoming frame $I_t$
+        \item \textbf{for each} pixel coordinate $(x, y)$ \textbf{do}
+        \begin{itemize}
+            \item $s \leftarrow I_t(x, y)$
+            \item $S_1(x, y) \leftarrow S_1(x, y) + s$
+            \item $S_2(x, y) \leftarrow S_2(x, y) + t \cdot s$
+            \item $E_{\text{raw}}(x, y) \leftarrow E_{\text{raw}}(x, y) + s^2$
+        \end{itemize}
+    \end{enumerate}
+    \item Compute closed-form temporal constants: $\Delta \leftarrow \frac{T^2(T^2-1)}{12}$, $S_t \leftarrow \frac{T(T-1)}{2}$
+    \item \textbf{for each} pixel coordinate $(x, y)$ \textbf{do}
+    \begin{enumerate}
+        \item $\hat{b} \leftarrow \frac{T \cdot S_2(x, y) - S_t \cdot S_1(x, y)}{\Delta}$
+        \item $\hat{a} \leftarrow \frac{S_1(x, y) - \hat{b} \cdot S_t}{T}$
+        \item Evaluate residual: $\text{MSE}_{\text{lin}} \leftarrow \frac{1}{T} \sum_{t=0}^{T-1} (I_t(x, y) - (\hat{a} + \hat{b}t))^2$
+        \item Evaluate baseline energy: $E_0 \leftarrow \frac{E_{\text{raw}}(x, y)}{T} + \epsilon$
+        \item $r \leftarrow \frac{\text{MSE}_{\text{lin}}}{E_0}$
+        \item \textbf{if} $r \le \tau$ \textbf{then}
+        \begin{itemize}
+            \item \textbf{if} $|\hat{b}| < \theta_{\text{slope}}$ \textbf{then}
+            \begin{itemize}
+                \item $M(x, y) \leftarrow \textsc{Mode\_TFC\_Const}$
+                \item $A(x, y) \leftarrow \text{quantize}(\hat{a})$
+            \end{itemize}
+            \item \textbf{else}
+            \begin{itemize}
+                \item $M(x, y) \leftarrow \textsc{Mode\_TFC\_Linear}$
+                \item $A(x, y) \leftarrow \text{quantize}(\hat{a})$
+                \item $B(x, y) \leftarrow \text{quantize}(\hat{b})$
+            \end{itemize}
+        \end{itemize}
+        \item \textbf{else}
+        \begin{itemize}
+            \item $M(x, y) \leftarrow \textsc{Mode\_FB\_Raw}$
+            \item Store raw sample vector $\{I_t(x, y)\}_{t=0}^{T-1}$ in fallback buffer $F$
+        \end{itemize}
+    \end{enumerate}
+\end{enumerate}
+\vspace{2mm} \hrule
+\end{minipage}
+\end{figure}

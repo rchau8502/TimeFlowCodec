@@ -1,4 +1,103 @@
 \chapter{Background and Related Work}
-We summarize classical block-based codecs (H.264/AVC, HEVC, AV1) and contrast
-them with per-pixel temporal regression. We also position TFC relative to
-lightweight neural compression and intra-frame predictors.
+\label{chap:related_work}
+
+Video compression has traditionally been defined by the pursuit of rate-distortion optimization on photographic images captured from the natural physical world. Consequently, the prevailing architectures in modern standards are inherently tuned to natural visual statistics. In this chapter, we review the canonical hybrid block-based framework, examine specialized screen content extensions, contrast them with transform-free coding techniques, and position TimeFlowCodec within the broader taxonomy of video compression algorithms.
+
+\section{The Classical Hybrid Video Coding Paradigm}
+The architectural lineage spanning ITU-T H.261, H.263, MPEG-2, MPEG-4 Visual, H.264/MPEG-4 AVC~\cite{wiegand2003overview}, H.265/HEVC~\cite{sullivan2012overview}, and the current state-of-the-art standards H.266/VVC~\cite{bross2021overview} and AOMedia AV1~\cite{chen2020overview} is collectively termed the \textit{hybrid video coding framework}. 
+
+The word ``hybrid'' refers to the dual application of:
+\begin{enumerate}
+    \item \textbf{Temporal Predictive Coding (Inter-Prediction):} Translating blocks of pixels from previously decoded reference frames using motion vectors to model translational motion.
+    \item \textbf{Spatial Transform Coding (Intra-Prediction \& Residual Coding):} Applying linear orthogonal transforms (predominantly the Discrete Cosine Transform (DCT) and Discrete Sine Transform (DST)) to decorrelate spatial residual energy.
+\end{enumerate}
+
+\subsection{Motion Compensation Mechanics}
+In block-based inter-prediction, an incoming frame at time $t$ is subdivided into non-overlapping blocks $B$. For each block, a motion estimation algorithm searches a spatial displacement window in a reference frame at time $t - \Delta t$ to find a matching block $B_{\text{ref}}$ minimizing a distortion metric such as the Sum of Absolute Differences (SAD):
+\begin{equation}
+    \mathbf{v}^* = \arg\min_{\mathbf{v} \in \mathcal{W}} \sum_{(x, y) \in B} |I_t(x, y) - I_{t-\Delta t}(x + v_x, y + v_y)|
+\end{equation}
+The residual error signal $e(x, y) = I_t(x, y) - I_{t-\Delta t}(x + v_x^*, y + v_y^*)$ is then forwarded to the transform engine.
+
+While translational block motion compensation is well-suited for rigid 2D camera pans and slow zooms, it has substantial limitations for screen content:
+\begin{itemize}
+    \item \textbf{Fractional-Pixel Interpolation Blur:} Motion vectors with sub-pixel precision require fractional interpolation filtering (e.g., 8-tap DCT-based filters). On screen content with sharp single-pixel edges, sub-pixel interpolation acts as an aggressive low-pass filter, blurring crisp typography.
+    \item \textbf{Discontinuous Updates:} Typical UI events (such as text input, pop-up menus, or syntax highlighting color changes) are non-translational. Searching for motion vectors in non-translational scenarios wastes computational cycles and produces complex residual patterns.
+\end{itemize}
+
+\subsection{Spatial Frequency Transforms (DCT/DST)}
+The 2D Discrete Cosine Transform maps an $N \times N$ block of spatial pixel intensities $f(x, y)$ into frequency coefficients $F(u, v)$:
+\begin{equation}
+    F(u, v) = \alpha(u)\alpha(v) \sum_{x=0}^{N-1}\sum_{y=0}^{N-1} f(x, y) \cos\left[\frac{(2x+1)u\pi}{2N}\right] \cos\left[\frac{(2y+1)v\pi}{2N}\right]
+\end{equation}
+Because the DCT assumes periodic and smooth signal extensions, sharp step discontinuities in screen content generate significant energy across high-frequency basis functions. When coarse scalar quantization is applied to achieve target bitrates, these high frequencies are truncated, producing severe Gibbs oscillations that manifest as visible halo artifacts surrounding letters and window borders.
+
+\section{Screen Content Coding Extensions (HEVC-SCC)}
+Recognizing the inefficiencies of standard hybrid tools on synthetic video, the Joint Collaborative Team on Video Coding (JCT-VC) developed the Screen Content Coding extension to HEVC (HEVC-SCC)~\cite{xu2015overview,lin2015overview}. HEVC-SCC introduced four specialized coding tools into the traditional block pipeline:
+
+\begin{enumerate}
+    \item \textbf{Intra Block Copy (IBC):} IBC treats the currently reconstructing frame as an additional reference picture. Motion estimation algorithms search previously reconstructed spatial regions in the current picture for matching blocks. This effectively captures recurring text characters, UI buttons, and repeating icons.
+    \item \textbf{Palette Mode:} For blocks containing a sparse set of dominant colors, Palette Mode extracts a local color lookup table (up to 32 RGB/YUV entries) and encodes pixel positions as a 2D matrix of palette indices using horizontal or vertical raster scan-order run lengths.
+    \item \textbf{Adaptive Color Transform (ACT):} ACT applies an in-loop, reversible decorrelation matrix to convert RGB samples into an adaptive YCoCg-R space without subsampling, improving residual energy compaction.
+    \item \textbf{Transform Skip Mode (TSM):} Allows the encoder to bypass the 2D DCT/DST for small ($4\times 4$) blocks, quantizing spatial residual samples directly in the spatial domain to avoid ringing.
+\end{enumerate}
+
+\subsection{Architectural Trade-Offs and Hardware Deployment Barriers in HEVC-SCC}
+While HEVC-SCC demonstrates substantial coding gains over standard HEVC on synthetic video, it suffers from severe systemic limitations that have prevented widespread commercial adoption:
+\begin{itemize}
+    \item \textbf{Prohibitive Encoder Complexity:} Intra Block Copy requires exhaustive 2D spatial block matching over an unconstrained reconstructed search buffer. Evaluating IBC displacement vector candidates increases encoding runtime by $300\%$ to $1000\%$ compared to standard HEVC, rendering real-time 60~FPS software encoding unfeasible on standard CPUs.
+    \item \textbf{The Silicon Decoding Barrier:} Consumer GPUs and Systems-on-Chip (Apple VideoToolbox, NVIDIA NVDEC, Intel QuickSync, Qualcomm Adreno) incorporate dedicated fixed-function ASIC silicon for standard HEVC Main and Main 10 profiles. However, \textit{hardware support for the HEVC-SCC profile is virtually nonexistent in consumer silicon}. Consequently, client devices are forced to decode HEVC-SCC streams via software decoders, leading to high CPU thermal dissipation, battery drain, and dropped frames on mobile platforms.
+    \item \textbf{Persistence of Quadtree Syntax Overhead:} Even when Palette Mode and Transform Skip are selected, the bitstream remains bound to the hierarchical quadtree Coding Tree Unit (CTU) structure. The encoder must continuously signal split flags, mode flags, and prediction units, incurring substantial syntactic overhead on static regions.
+\end{itemize}
+
+In contrast, TimeFlowCodec avoids 2D block searches entirely by formulating temporal compression as independent 1D Ordinary Least Squares regressions. This reduces encoding complexity to $\mathcal{O}(T)$ linear time and enables universal vectorized SIMD decoding on any standard CPU or GPU compute shader without requiring dedicated silicon codecs.
+
+\section{Transform-Free and Raster-Level Encoders}
+In the lossless and low-latency graphics domains, transform-free algorithms have long been preferred for screen rendering. Run-Length Encoding (RLE) and spatial dictionary algorithms (LZ77, LZW) form the basis of graphic formats such as GIF, PNG, and modern formats like QOI (Quite OK Image format). 
+
+In remote display protocols such as Microsoft Remote Desktop Protocol (RDP) and Virtual Network Computing (VNC), frames are compressed using bounding-box screen diffing and tile-based RLE (e.g., RDP 6.0 / RemoteFX). However, these protocols are designed primarily for network transmission of desktop GUIs under lossless constraints. They lack continuous lossy rate-distortion tuning, temporal trajectory modeling, or smooth rate control, causing bandwidth consumption to spike dramatically during full-screen animations or video playback.
+
+\section{1D Temporal Transforms and Wavelet Coding}
+A related branch of literature explores 1D temporal filtering across consecutive video frames. In 3D Wavelet Video Coding (e.g., Motion-Compensated Temporal Filtering (MCTF)), Haar or biorthogonal wavelets are applied along the temporal axis to decompose a Group of Pictures (GOP) into temporal subbands. 
+
+However, MCTF historically suffered from two fundamental obstacles:
+\begin{enumerate}
+    \item \textbf{Motion Tracking Along Trajectories:} In natural video, pixel trajectories diverge due to non-rigid motion and occlusions, leading to disconnected temporal trees.
+    \item \textbf{Buffer Memory and Latency:} Multilevel temporal wavelet decomposition requires buffering entire GOPs (often 16 to 32 frames) in uncompressed memory, incurring prohibitive memory footprints and latency.
+\end{enumerate}
+
+\section{Neural Video Compression and Implicit Representations}
+In recent years, deep learning has spurred end-to-end learned video compression frameworks (e.g., DVC~\cite{lu2019dvc}) that replace handcrafted hybrid components with deep autoencoders and optical flow sub-networks. More recently, Implicit Neural Representations (INRs) for video, such as NeRV (Neural Representations for Video), fit multilayer perceptrons (MLPs) to map temporal coordinate $t$ to frame pixels $I(x, y, t)$.
+
+While scientifically compelling, neural approaches require millions of floating-point operations (FLOPs) per pixel and specialized GPU hardware for inference, resulting in low decoding frame rates (often 5 to 15 FPS) and substantial energy consumption that make them impractical for lightweight, battery-constrained desktop screen capture and real-time playback.
+
+\section{Positioning TimeFlowCodec in the Design Space}
+Table~\ref{tab:codec_comparison} summarizes how TimeFlowCodec compares against existing paradigms.
+
+\begin{table}[h]
+\centering
+\small
+\caption{Taxonomy of Video Coding Paradigms Across Synthetic and Screen Content.}
+\label{tab:codec_comparison}
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Paradigm} & \textbf{Spatial Processing} & \textbf{Temporal Processing} & \textbf{Edge Ringing} & \textbf{Dec. Complexity} \\
+\midrule
+H.264 / AVC & 2D DCT on Blocks & Block Motion Vectors & Severe & Low ($\mathcal{O}(N)$) \\
+H.265 / HEVC & 2D DCT/DST Quadtree & Block Motion Vectors & Moderate & Moderate \\
+HEVC-SCC & Palette / Trans. Skip & Intra/Inter Block Copy & Low & High \\
+AV1 & Multi-Transform Blocks & Subpixel Motion & Low & High \\
+3D Wavelet (MCTF) & 2D Spatial Wavelet & 1D Temporal Wavelet & Minimal & High \\
+Neural (NeRV / DVC) & Deep CNN / MLP & Learned Flow / Latents & Minimal & Very High (GPU) \\
+\textbf{TimeFlowCodec} & \textbf{None (Per-Pixel)} & \textbf{1D OLS Regression} & \textbf{Zero} & \textbf{Very Low ($\mathcal{O}(T)$)} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+TimeFlowCodec occupies a unique position in this design space:
+\begin{itemize}
+    \item It operates \textbf{without spatial frequency transforms}, eliminating block artifacts and Gibbs ringing at text boundaries.
+    \item It performs \textbf{per-pixel temporal regression in closed form} ($\mathcal{O}(T)$ linear time), avoiding expensive iterative motion vector searches.
+    \item It preserves \textbf{native full-resolution RGB} color without chroma downsampling, ensuring pristine text edge contrast.
+    \item It features \textbf{deterministic bounded memory and streaming playback}, enabling real-time playback on lightweight hardware.
+\end{itemize}

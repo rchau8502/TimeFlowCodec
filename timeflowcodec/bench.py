@@ -245,6 +245,42 @@ def write_results(out_dir: Path, results: list[BenchResult], env: dict, missing:
     )
     if missing:
         lines.append(f"Missing codecs: {', '.join(missing)}\n")
+
+    # Compute Bjontegaard Delta metrics where 4+ points exist
+    bd_records = {}
+    from .bjontegaard import bd_psnr, bd_rate
+    clips = sorted(set(r.clip for r in results))
+    for clip in clips:
+        clip_res = [r for r in results if r.clip == clip]
+        tfc_res = [r for r in clip_res if r.codec == "tfc" and r.psnr is not None and r.psnr != float("inf")]
+        if len(tfc_res) >= 4:
+            tfc_rates = [r.size_bytes for r in tfc_res]
+            tfc_psnrs = [r.psnr for r in tfc_res]
+            for codec in sorted(set(r.codec for r in clip_res if r.codec != "tfc")):
+                anchor_res = [r for r in clip_res if r.codec == codec and r.psnr is not None and r.psnr != float("inf")]
+                if len(anchor_res) >= 4:
+                    anchor_rates = [r.size_bytes for r in anchor_res]
+                    anchor_psnrs = [r.psnr for r in anchor_res]
+                    try:
+                        rate_pct = bd_rate(anchor_rates, anchor_psnrs, tfc_rates, tfc_psnrs)
+                        psnr_gain = bd_psnr(anchor_rates, anchor_psnrs, tfc_rates, tfc_psnrs)
+                        bd_records[f"{clip} vs {codec}"] = {
+                            "clip": clip,
+                            "anchor": codec,
+                            "bd_rate_pct": rate_pct,
+                            "bd_psnr_db": psnr_gain,
+                        }
+                    except Exception:
+                        pass
+
+    if bd_records:
+        lines.append("## Bjontegaard Delta Metrics (TFC vs Baselines)\n")
+        lines.append("| Clip | Anchor Codec | BD-Rate (%) | BD-PSNR (dB) |")
+        lines.append("|---|---|---|---|")
+        for key, bd in bd_records.items():
+            lines.append(f"| {bd['clip']} | {bd['anchor']} | {bd['bd_rate_pct']:+.2f}% | {bd['bd_psnr_db']:+.2f} dB |")
+        lines.append("\n*Negative BD-Rate indicates bitrate reduction for equal quality (superior efficiency).*\n")
+
     lines.append("## Scoreboard\n")
     lines.append("| codec | preset | crf | clip | size (bytes) | enc time (s) | dec time (s) | psnr | ssim |")
     lines.append("|---|---|---|---|---|---|---|---|---|")

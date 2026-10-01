@@ -1,3 +1,55 @@
-\chapter{Mathematical Proofs}
-Derivations for closed-form linear regression on discrete time indices and error
-ratio properties used for mode decisions.
+\chapter{Command-Line Interface and API Reference}
+\label{app:api}
+
+This appendix provides a practical reference for using the TimeFlowCodec command-line interface (CLI) and Python developer API.
+
+\section{Command-Line Interface (\texttt{tfc})}
+The package installs a unified console executable \texttt{tfc}:
+
+\subsection{Encoding Video to .tfc}
+\begin{verbatim}
+tfc encode input.mp4 output.tfc [OPTIONS]
+
+Options:
+  --preset [screen|anime|lownoise|general]
+                        Select encoding configuration preset. Default: screen
+  --tau FLOAT           Override error ratio threshold (e.g. 0.0001).
+  --slope FLOAT         Override slope threshold (default: 0.001).
+  --tiling INT          Set spatial block dimension (1 for per-pixel).
+  --window INT          Temporal chunk duration in frames (v5 default: 48).
+  --comp [none|zlib|lzma|zstd]
+                        Payload compression algorithm. Default: zstd
+  --max-ram-mb INT      Maximum RAM allocated before disk memmap fallback.
+\end{verbatim}
+
+\subsection{Decoding .tfc to Video}
+\begin{verbatim}
+tfc decode input.tfc output.mp4 [OPTIONS]
+
+Options:
+  --fps FLOAT           Override playback frame rate if unspecified in v1-v4.
+  --lossless            Force lossless RGB output encoding via libx264rgb.
+\end{verbatim}
+
+\section{Python Developer API}
+The high-level programmatic interface provides simple functional bindings:
+
+\begin{verbatim}
+import timeflowcodec as tfc
+
+# Encode MP4 to .tfc container
+tfc.encode_video_to_tfc(
+    in_path="recording.mp4",
+    out_path="recording.tfc",
+    preset="screen",
+    container_version=5,
+    payload_comp_type=tfc.COMP_ZSTD,
+)
+
+# Decode .tfc container to uncompressed in-memory RGB array
+rgb_frames = tfc.decode_tfc_to_video(
+    in_path="recording.tfc",
+    out_path=None  # Returning array directly in memory
+)
+print("Decoded video tensor shape:", rgb_frames.shape)
+\end{verbatim}

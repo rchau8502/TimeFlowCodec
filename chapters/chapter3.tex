@@ -1,5 +1,154 @@
 \chapter{Theoretical Foundations}
-We derive closed-form least-squares fits for CONST and LINEAR models on discrete
-time indices $t = 0, \dots, T-1$, define the error ratio criterion, and analyze
-stability with slope thresholds. Complexity is $\mathcal{O}(T)$ per pixel per
-channel.
+\label{chap:theory}
+
+In this chapter, we develop the mathematical framework underpinning TimeFlowCodec. We formalize the discrete temporal trajectory model, derive closed-form Ordinary Least Squares (OLS) solutions for constant and linear temporal functions, define the variance-normalized mode decision rule, and introduce low-rank spatial-temporal matrix factorization. Finally, we provide an algorithmic complexity analysis comparing temporal regression with classical block-matching motion compensation.
+
+\section{Signal Representation and Temporal Trajectories}
+Let a video sequence be represented by a 4D discrete tensor:
+\begin{equation}
+    V \in \mathbb{R}^{T \times H \times W \times C}
+\end{equation}
+where $T$ is the temporal duration (number of frames), $H$ is the frame height, $W$ is the frame width, and $C \in \{1, 3\}$ is the number of color channels (e.g., $C=3$ for RGB or YUV).
+
+For any fixed spatial coordinate $(x, y) \in [0, W-1] \times [0, H-1]$ and fixed channel $c \in \{0, \dots, C-1\}$, we define the 1D temporal signal vector:
+\begin{equation}
+    \mathbf{s} = [s_0, s_1, \dots, s_{T-1}]^T \in \mathbb{R}^T, \quad \text{where } s_t = V(t, y, x, c)
+\end{equation}
+In digital video, the raw samples are uniformly quantized integers $s_t \in \{0, 1, \dots, 255\}$.
+
+Rather than transforming spatial slices $V(t, \cdot, \cdot, c)$ via 2D spatial basis functions, TimeFlowCodec approximates the continuous function generating $\mathbf{s}$ over the discrete temporal index set $\mathcal{T} = \{0, 1, \dots, T-1\}$.
+
+\section{Closed-Form Temporal Regression Models}
+We consider parametric temporal models $\hat{s}_t = f(t; \mathbf{\theta})$. Model parameters $\mathbf{\theta}$ are estimated by minimizing the discrete Mean Squared Error (MSE):
+\begin{equation}
+    \mathcal{L}(\mathbf{\theta}) = \frac{1}{T} \sum_{t=0}^{T-1} (s_t - f(t; \mathbf{\theta}))^2
+\end{equation}
+
+\subsection{Mode 0: Constant Model (\textsc{Const})}
+The constant model assumes pixel intensity remains invariant over the temporal window:
+\begin{equation}
+    \hat{s}_t = a, \quad \forall t \in \mathcal{T}
+\end{equation}
+Setting the partial derivative of $\mathcal{L}(a)$ with respect to $a$ to zero:
+\begin{equation}
+    \frac{\partial \mathcal{L}}{\partial a} = -\frac{2}{T} \sum_{t=0}^{T-1} (s_t - a) = 0 \implies \hat{a} = \frac{1}{T} \sum_{t=0}^{T-1} s_t = \bar{s}
+\end{equation}
+The optimal estimator $\hat{a}$ is simply the empirical temporal mean of the pixel over the sequence. The corresponding residual sum of squares is:
+\begin{equation}
+    \text{RSS}_{\text{const}} = \sum_{t=0}^{T-1} (s_t - \bar{s})^2 = T \cdot \text{Var}(s)
+\end{equation}
+
+\subsection{Mode 1: Linear Model (\textsc{Linear})}
+The linear model captures gradual changes, such as fades, smooth scrolling, or lighting transitions:
+\begin{equation}
+    \hat{s}_t = a + b t, \quad \forall t \in \mathcal{T}
+\end{equation}
+To derive closed-form estimators for the intercept $a$ and slope $b$, we formulate the normal equations:
+\begin{equation}
+    \begin{bmatrix}
+        \sum_{t=0}^{T-1} 1 & \sum_{t=0}^{T-1} t \\
+        \sum_{t=0}^{T-1} t & \sum_{t=0}^{T-1} t^2
+    \end{bmatrix}
+    \begin{bmatrix}
+        a \\
+        b
+    \end{bmatrix}
+    =
+    \begin{bmatrix}
+        \sum_{t=0}^{T-1} s_t \\
+        \sum_{t=0}^{T-1} t \cdot s_t
+    \end{bmatrix}
+\end{equation}
+
+Using standard discrete summation identities:
+\begin{align}
+    S_0 &= \sum_{t=0}^{T-1} 1 = T \\
+    S_1 &= \sum_{t=0}^{T-1} t = \frac{T(T-1)}{2} \\
+    S_2 &= \sum_{t=0}^{T-1} t^2 = \frac{T(T-1)(2T-1)}{6}
+\end{align}
+The determinant of the system matrix is:
+\begin{equation}
+    \Delta = S_0 S_2 - S_1^2 = T \cdot \frac{T(T-1)(2T-1)}{6} - \frac{T^2(T-1)^2}{4} = \frac{T^2(T^2 - 1)}{12}
+\end{equation}
+
+Applying Cramer's rule yields explicit, closed-form expressions for $\hat{b}$ and $\hat{a}$:
+\begin{align}
+    \hat{b} &= \frac{T \sum_{t=0}^{T-1} t s_t - S_1 \sum_{t=0}^{T-1} s_t}{\Delta} = \frac{12 \sum_{t=0}^{T-1} (t - \bar{t}) s_t}{T(T^2 - 1)} \label{eq:slope_est} \\
+    \hat{a} &= \bar{s} - \hat{b} \cdot \bar{t} = \frac{\sum_{t=0}^{T-1} s_t - \hat{b} S_1}{T} \label{eq:intercept_est}
+\end{align}
+where $\bar{t} = \frac{T-1}{2}$. 
+
+\subsection{$\mathcal{O}(T)$ Streaming Accumulation}
+Equations~\eqref{eq:slope_est} and~\eqref{eq:intercept_est} reveal a crucial property: computing $\hat{a}$ and $\hat{b}$ requires only two linear accumulators across the temporal sequence:
+\begin{equation}
+    A_1 = \sum_{t=0}^{T-1} s_t, \quad A_2 = \sum_{t=0}^{T-1} t \cdot s_t
+\end{equation}
+As frames arrive from a video source or stream, $A_1$ and $A_2$ are accumulated in a single pass in $\mathcal{O}(1)$ working memory per pixel. Once $T$ frames have been ingested, $\hat{a}$ and $\hat{b}$ are computed in $\mathcal{O}(1)$ elementary arithmetic operations.
+
+\section{Mode Decision Engine}
+After computing the candidate models, the encoder must select the most rate-distortion efficient coding mode. 
+
+\subsection{Variance-Normalized Error Ratio}
+To ensure that error tolerance behaves consistently across both high-contrast text and dark backgrounds, TimeFlowCodec computes the normalized error ratio $r$:
+\begin{equation}
+    r = \frac{\text{MSE}(\mathbf{s}, \hat{\mathbf{s}}_{\text{linear}})}{\text{MSE}(\mathbf{s}, \mathbf{0}) + \epsilon} = \frac{\frac{1}{T} \sum_{t=0}^{T-1} (s_t - (\hat{a} + \hat{b}t))^2}{\frac{1}{T} \sum_{t=0}^{T-1} s_t^2 + \epsilon}
+\end{equation}
+where $\epsilon = 10^{-6}$ prevents numerical division by zero on pure black pixels. Alternatively, when variance normalization is enabled:
+\begin{equation}
+    r_{\text{var}} = \frac{\text{MSE}(\mathbf{s}, \hat{\mathbf{s}}_{\text{linear}})}{\text{Var}(\mathbf{s}) + \epsilon}
+\end{equation}
+
+\subsection{Decision Logic and Slope Gating}
+The mode decision proceeds as follows:
+\begin{enumerate}
+    \item \textbf{Parametric vs. Fallback Test:} If $r \le \tau$, where $\tau$ is the user-configured temporal tolerance (typically $\tau \in [10^{-5}, 10^{-2}]$), the linear model satisfies the reconstruction quality constraint.
+    \item \textbf{Constant vs. Linear Selection:} If $r \le \tau$, the encoder tests whether the estimated slope magnitude is significant:
+    \begin{equation}
+        |\hat{b}| < \theta_{\text{slope}}
+    \end{equation}
+    If the slope is below the threshold $\theta_{\text{slope}}$ (default $0.001$), the pixel is classified as \textsc{Mode\_TFC\_Const} (storing only quantized $\hat{a}$). Otherwise, it is classified as \textsc{Mode\_TFC\_Linear} (storing quantized $\hat{a}$ and $\hat{b}$).
+    \item \textbf{Fallback Mode:} If $r > \tau$, the linear hypothesis is rejected, and the pixel transitions to a fallback mode: either low-rank \textsc{Mode\_TFC\_Matrix} or sample-by-sample \textsc{Mode\_FB\_Raw}.
+\end{enumerate}
+
+\section{Matrix Mode: Spatial-Temporal Low-Rank Factorization}
+In regions where individual pixel trajectories undergo non-linear variations but maintain strong spatial correlation (for example, a tile containing a moving window shadow or anti-aliased font stroke), storing full uncompressed raw samples for each pixel is wasteful.
+
+For a spatial tile of $K = B \times B$ pixels over $T$ frames, we construct the space-time residual matrix:
+\begin{equation}
+    \mathbf{M} \in \mathbb{R}^{T \times K}
+\end{equation}
+where column $k$ contains the temporal trajectory of the $k$-th pixel in the tile.
+
+Under \textsc{Mode\_TFC\_Matrix}, we compute the optimal rank-1 matrix approximation via the Singular Value Decomposition (SVD):
+\begin{equation}
+    \mathbf{M} \approx \sigma_1 \mathbf{u}_1 \mathbf{v}_1^T
+\end{equation}
+where $\mathbf{u}_1 \in \mathbb{R}^T$ represents the dominant temporal profile and $\mathbf{v}_1 \in \mathbb{R}^K$ represents the spatial basis weights. Instead of storing $T \times K$ individual uint8 samples, the encoder quantizes and stores the $T$-element temporal vector and the $K$-element spatial vector, reducing sample storage from $\mathcal{O}(T \cdot K)$ to $\mathcal{O}(T + K)$.
+
+\section{Computational Complexity Analysis}
+A key theoretical advantage of TimeFlowCodec is its deterministic, embarrassingly parallel computational complexity.
+
+\begin{table}[h]
+\centering
+\caption{Theoretical Computational Complexity per Pixel-Frame.}
+\label{tab:complexity}
+\begin{tabular}{lccc}
+\toprule
+\textbf{Codec} & \textbf{Encoding Complexity} & \textbf{Decoding Complexity} & \textbf{Working Memory} \\
+\midrule
+H.264 / AVC & $\mathcal{O}(W_s^2 \cdot B^2)$ & $\mathcal{O}(B^2)$ & Full Reference Frame \\
+H.265 / HEVC & $\mathcal{O}(D_{\text{tree}} \cdot W_s^2 \cdot B^2)$ & $\mathcal{O}(B^2)$ & Multiple Reference Frames \\
+AV1 & $\mathcal{O}(M_{\text{modes}} \cdot W_s^2 \cdot B^2)$ & $\mathcal{O}(B^2)$ & Multiple Reference Frames \\
+\textbf{TimeFlowCodec} & $\mathbf{\mathcal{O}(1)}$ \textbf{per frame} & $\mathbf{\mathcal{O}(1)}$ \textbf{per frame} & \textbf{Streaming Buffer ($W \times H$)} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+As shown in Table~\ref{tab:complexity}, block-based codecs require block matching over a spatial search window $W_s \times W_s$. Even with fast motion estimation (such as EPZS or Diamond Search), motion vector estimation requires dozens to hundreds of operations per block. 
+
+In contrast, TimeFlowCodec requires exactly:
+\begin{itemize}
+    \item 2 multiplications and 2 additions per pixel per incoming frame during accumulation ($A_1, A_2$).
+    \item 1 division, 2 multiplications, and 1 subtraction to evaluate $\hat{a}$ and $\hat{b}$ at window termination.
+\end{itemize}
+This represents a pure $\mathcal{O}(T)$ total complexity for an entire temporal window, or $\mathcal{O}(1)$ operations per pixel per frame. Furthermore, because each pixel trajectory is mathematically independent during the regression stage, the algorithm can be trivially parallelized across SIMD lanes or GPU compute threads with zero inter-pixel communication.
