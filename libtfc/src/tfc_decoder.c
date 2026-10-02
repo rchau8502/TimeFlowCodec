@@ -19,6 +19,13 @@
 #define TFC_HAS_ZSTD 0
 #endif
 
+#if defined(__ARM_NEON) || defined(__aarch64__)
+#include <arm_neon.h>
+#define TFC_HAS_NEON 1
+#else
+#define TFC_HAS_NEON 0
+#endif
+
 static inline uint8_t clamp_u8(float v) {
     int iv = (int)roundf(v);
     if (iv < 0) return 0;
@@ -491,12 +498,32 @@ tfc_status_t tfc_decode_v3_v4_memory(
                 uint8_t *frame_ptr = frame_base + (size_t)f_idx * frame_stride;
 
                 if (tile_size == 1) {
-                    for (uint32_t i = 0; i < logical_count; ++i) {
-                        float v = intercept[i] + slope[i] * (float)t;
-                        if (is_raw[i] && raw_residuals) {
-                            v += (float)raw_residuals[raw_idx_map[i] * seg_len + t] * raw_scale;
+#if TFC_HAS_NEON
+                    if (pixel_stride == 1 && raw_count == 0) {
+                        uint32_t i = 0;
+                        float32x4_t vt = vdupq_n_f32((float)t);
+                        for (; i + 4 <= logical_count; i += 4) {
+                            float32x4_t vi = vld1q_f32(intercept + i);
+                            float32x4_t vs = vld1q_f32(slope + i);
+                            float32x4_t vf = vmlaq_f32(vi, vs, vt);
+                            int32x4_t vi32 = vcvtnq_s32_f32(vf);
+                            int16x4_t vi16 = vqmovn_s32(vi32);
+                            uint8x8_t vu8 = vqmovun_s16(vcombine_s16(vi16, vi16));
+                            vst1_lane_u32((uint32_t *)(frame_ptr + i), vreinterpret_u32_u8(vu8), 0);
                         }
-                        frame_ptr[i * pixel_stride] = clamp_u8(v);
+                        for (; i < logical_count; ++i) {
+                            frame_ptr[i] = clamp_u8(intercept[i] + slope[i] * (float)t);
+                        }
+                    } else
+#endif
+                    {
+                        for (uint32_t i = 0; i < logical_count; ++i) {
+                            float v = intercept[i] + slope[i] * (float)t;
+                            if (is_raw[i] && raw_residuals) {
+                                v += (float)raw_residuals[raw_idx_map[i] * seg_len + t] * raw_scale;
+                            }
+                            frame_ptr[i * pixel_stride] = clamp_u8(v);
+                        }
                     }
                 } else {
                     for (uint32_t ty = 0; ty < tiles_y; ++ty) {
