@@ -30,11 +30,26 @@ Goal: execute the approved TimeFlowCodec improvement roadmap and prepare publica
 - [x] 23. Production CLI & UNIX Pipeline Interface (`timeflowcodec/cli.py`): standard `--bitrate`, `--crf`, `--threads`, `--tune screen`, `--rdo`.
 - [x] 24. Full unit test suite & verification (`tests/test_rate_control.py`, `tests/test_rdo.py`, `tests/test_multithreading.py`, `tests/test_libtfc.py`, `tests/test_cli_flags.py`, 184/184 tests passing, ruff 100% clean).
 
-Current phase: Production-Grade Codec Maturity complete.
-All 184 tests passing (183 passed, 1 skipped, 0 failed). Ruff linting 100% clean. Monograph and conference paper compiled with 0 errors.
+## Phase: Real-World Data Testbed Architecture (Telegram UI + Vercel + Supabase + Slurm HPC)
+- [x] 25. Supabase Database Schema (`testbed/sql/schema.sql`): Zero-PII `users`, `blind_sessions`, `hpc_tasks`, strict RLS, atomic `claim_next_hpc_task` RPC (`FOR UPDATE SKIP LOCKED`).
+- [x] 26. Vercel Serverless Webhook (`testbed/api/webhook.py`): HMAC-SHA256 user pseudonymization, .edu email domain gate, storage upload, task enqueuing.
+- [x] 27. Slurm HPC Outbound Worker (`testbed/hpc/hpc_worker.py`, `testbed/hpc/hpc_job.slurm`): Headless cluster worker polling Supabase, executing TimeFlowCodec, handling SIGTERM/exceptions cleanly.
+- [x] 28. Integration testing & verification (`tests/test_testbed.py`, 192 passed, 1 skipped, 0 failed, 100% clean linter).
 
-## Decisions
-- Focus on TimeFlowCodec's unique advantages: 1D temporal regression, zero Gibbs ringing on text, native 4:4:4 RGB, sequential O(1) line buffer, and SIMD/C parallel decode throughput.
-- Modernize user-facing API to standard AV1/x264 conventions: `--crf`, `--bitrate`, `--threads`, `--tune`.
-- Provide zero-dependency ANSI C reference decoder (`libtfc`) for universal systems embedding and extreme decode speed (>500 FPS).
+## Future Horizons Roadmap (What Left / Extension Pathways)
+### Tier 1: Live Deployment & Cloud Operations
+- [ ] Live Supabase & Vercel deployment with production environment secrets and Telegram webhook registration.
+- [ ] Live cluster Slurm launch with active worker telemetry.
+- [ ] PyPI package build and binary wheel distribution (`timeflowcodec-2.0.0`).
+
+### Tier 2: Ecosystem & Client Integration
+- [ ] WebAssembly build (`libtfc.wasm`) for native in-browser `<canvas>` playback.
+- [ ] FFmpeg native demuxer / decoder patch (`libavcodec/tfcdec.c`).
+- [ ] Explicit AVX2 / ARM NEON SIMD vectorization for >1,500 FPS throughput.
+
+### Tier 3: PhD Continuation & Academic Standard (TimeFlowCodec v2.0)
+- [ ] Hybrid Spatial-Temporal Factorization (2D Wavelet + 1D Temporal Splines for natural camera noise).
+- [ ] Implicit Neural Representations (INR / Coordinate MLP for complex non-linear dynamics).
+- [ ] Silicon Hardware RTL / Verilog decoder implementation (single line-buffer O(1) SRAM architecture).
+- [ ] Formal ISO/IEC MPEG or IETF Internet-Draft specification submission.
 

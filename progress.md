@@ -254,3 +254,14 @@ legacy segment RGB allocation even in streaming-export mode.
   - Total test suite: **184 tests (183 passed, 1 skipped, 0 failed)** in 29.5s.
   - Ruff code linter: 100% clean across all modules, tests, and scripts.
   - Recompiled full thesis monograph `TimeFlowCodec.pdf` (55 pages) and IEEE paper `paper/TimeFlowCodec_IEEE.pdf` (5 pages) with 0 errors.
+
+## 2026-10-01: real-world data testbed architecture (Telegram + Vercel + Supabase + Slurm)
+
+- Bootstrapped lightweight, privacy-first asynchronous research testbed under `testbed/`:
+  - `testbed/sql/schema.sql`: Zero-PII `users`, `blind_sessions`, `hpc_tasks` with strict RLS and `claim_next_hpc_task` stored procedure (`FOR UPDATE SKIP LOCKED`).
+  - `testbed/api/webhook.py`: Vercel serverless webhook with HMAC-SHA256 pseudonymization, regex-based `.edu` domain verification without storing email addresses, and media storage forwarding.
+  - `testbed/hpc/hpc_worker.py` & `testbed/hpc/hpc_job.slurm`: Headless outbound-only Slurm worker with atomic task claiming, TimeFlowCodec execution, SIGTERM preemption handling, and error capture.
+  - `testbed/README.md` & `testbed/.env.example`: Deployment guide and configuration templates.
+- Added testbed unit tests in `tests/test_testbed.py` covering HMAC hashing, edu email regex matching, and research codec execution.
+- Verified test suite: **192 passed, 1 skipped, 0 failed** in 23.26s. Ruff linter 100% clean.
+
