@@ -33,6 +33,12 @@ jobs:
           pip install -e ".[bench,gui,dev]"
       - name: Lint
         run: ruff check .
+      - name: Build C Reference Decoder (libtfc)
+        run: |
+          cd libtfc
+          make
+          ./build/tfc_dec --help || true
+          cd ..
       - name: Unit tests
         run: pytest
       - name: Smoke CLI

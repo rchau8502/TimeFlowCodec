@@ -45,3 +45,49 @@ def test_wasm_node_execution():
         text=True,
     )
     assert res.returncode == 0, f"Node.js WASM execution failed: {res.stderr}"
+
+
+def test_wasm_demo_clip_decode_end_to_end():
+    """Verify that web/demo.tfc decodes to valid RGB frames in WebAssembly."""
+    demo_file = REPO_ROOT / "web" / "demo.tfc"
+    assert demo_file.exists(), f"Demo clip {demo_file} missing"
+
+    node_script = """
+    const fs = require('fs');
+    const wasmBuffer = fs.readFileSync(process.argv[1]);
+    const tfcBuffer = fs.readFileSync(process.argv[2]);
+
+    const wasiMock = {
+      wasi_snapshot_preview1: new Proxy({}, { get: () => () => 0 })
+    };
+
+    WebAssembly.instantiate(wasmBuffer, wasiMock).then(({ instance }) => {
+      const exp = instance.exports;
+      const inPtr = exp.tfc_wasm_alloc_in(tfcBuffer.length);
+      const memView = new Uint8Array(exp.memory.buffer, inPtr, tfcBuffer.length);
+      memView.set(tfcBuffer);
+
+      const status = exp.tfc_wasm_decode(tfcBuffer.length);
+      if (status !== 0) process.exit(1);
+
+      const w = exp.tfc_wasm_get_width();
+      const h = exp.tfc_wasm_get_height();
+      const n = exp.tfc_wasm_get_num_frames();
+      if (w === 0 || h === 0 || n === 0) process.exit(2);
+
+      const framePtr = exp.tfc_wasm_get_frame_ptr(0);
+      if (!framePtr) process.exit(3);
+
+      process.exit(0);
+    }).catch(err => {
+      console.error(err);
+      process.exit(10);
+    });
+    """
+    res = subprocess.run(
+        ["node", "-e", node_script, str(WASM_FILE), str(demo_file)],
+        capture_output=True,
+        text=True,
+    )
+    assert res.returncode == 0, f"Node.js WASM demo clip decode failed: {res.stderr}"
+

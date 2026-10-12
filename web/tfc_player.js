@@ -12,6 +12,8 @@ class TFCPlayer {
     this.metaStats = document.getElementById("metaStats");
     this.dropOverlay = document.getElementById("dropOverlay");
     this.fileInput = document.getElementById("fileInput");
+    this.loadDemoBtn = document.getElementById("loadDemoBtn");
+    this.loadDemoOverlayBtn = document.getElementById("loadDemoOverlayBtn");
 
     this.wasmInstance = null;
     this.wasmMemory = null;
@@ -77,6 +79,27 @@ class TFCPlayer {
     this.playBtn.addEventListener("click", () => this.togglePlay());
     this.restartBtn.addEventListener("click", () => this.seek(0));
     this.slider.addEventListener("input", (e) => this.seek(parseInt(e.target.value, 10)));
+
+    const handleDemo = (e) => {
+      e.stopPropagation();
+      this.loadDemo();
+    };
+    if (this.loadDemoBtn) this.loadDemoBtn.addEventListener("click", handleDemo);
+    if (this.loadDemoOverlayBtn) this.loadDemoOverlayBtn.addEventListener("click", handleDemo);
+  }
+
+  async loadDemo() {
+    try {
+      this.statusText.textContent = "Loading bundled demo.tfc...";
+      const resp = await fetch("demo.tfc");
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const buf = await resp.arrayBuffer();
+      this.decodeTfc(new Uint8Array(buf));
+      this.play();
+    } catch (err) {
+      console.error(err);
+      this.statusText.textContent = `Demo load failed: ${err.message}`;
+    }
   }
 
   async handleFile(file) {
