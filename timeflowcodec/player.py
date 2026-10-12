@@ -1,4 +1,8 @@
-"""Native RGB playback for short .tfc clips; no intermediate video conversion."""
+"""TimeFlowCodec Native Player Application.
+
+Copyright (c) 2025–2026 Rich Chau. All rights reserved.
+Proprietary Desktop Application License (see LICENSE Section 2).
+"""
 
 from __future__ import annotations
 

@@ -259,20 +259,25 @@ macOS:
 This produces `dist/TimeFlowCodec.app` and `dist/TimeFlowCodec_macbook_installer.dmg`.
 
 ## Releases
-- Package metadata is defined in `pyproject.toml` (`timeflowcodec` version `0.2.0`).
+- Package metadata is defined in `pyproject.toml` (`timeflowcodec` version `2.0.0`).
 - To publish artifacts, build with `python -m build` and upload your wheel/sdist to your chosen index (e.g., `twine upload dist/*`).
 
 ## Project Layout
-- `timeflowcodec/` – core codec (models, format, encoder/decoder)
-- `examples/` – CLI wrappers
-- `tests/` – pytest suite for models and encode/decode
-- `gui.py` – PySide6 GUI
-- `timeflowcodec_gui.spec` – PyInstaller spec
-- `main.tex`, `chapters/`, `appendices/`, `bibliography.bib`, `figures/` – LaTeX thesis materials
-- `timeflowcodec/bench.py` – benchmark harness
-- `clips/README.md` – guidance on sample clips (use git LFS if adding)
+- `timeflowcodec/` – core codec engine (models, container v5, encoder/decoder, CLI)
+- `libtfc/` – ANSI C99 and WebAssembly high-throughput reference decoder
+- `web/` – in-browser HTML5 `<canvas>` WebAssembly player
+- `presentation_pdfs/` – compiled presentation slides, handouts, monograph, and paper
+- `gui.py` – PySide6 desktop GUI application
+- `timeflowcodec_gui.spec` – PyInstaller spec for standalone desktop application
+- `main.tex`, `chapters/`, `appendices/`, `figures/` – LaTeX thesis monograph materials
+- `paper/` – IEEE conference manuscript materials
+- `tests/` – comprehensive pytest test suite
 
-## Notes
-- v3 adds YUV444/YUV420 coding and tile-native payload streams.
-- Payload compression: none (0), zlib (1), LZMA (2), zstd (3).
-- Mode maps are 2-bit packed + RLE; v3 stores CONST/LINEAR/RAW streams without per-sample indices.
+## License & Copyright
+
+**Copyright (c) 2025–2026 Rich Chau. All rights reserved.**
+
+This project uses a modular dual-licensing structure (see [`LICENSE`](LICENSE)):
+- **Core Codec & Reference Decoders:** The ANSI C99 library (`libtfc/`), WebAssembly player (`web/`), and core Python codec/CLI tools (`timeflowcodec/`) are licensed under the open-source **MIT License** for broad interoperability.
+- **Standalone Desktop Application:** The graphical application (`TimeFlowCodec.app`, `gui.py`, `timeflowcodec/player.py`) and branding are governed by the **Proprietary Desktop Application License** (free for personal and evaluation use; commercial redistribution and packaging reserved).
+- **Publications & Research:** Thesis monograph, conference paper, and presentation slide decks are Copyright (c) 2025–2026 Rich Chau. All rights reserved.

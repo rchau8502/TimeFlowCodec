@@ -1,3 +1,7 @@
+/* TimeFlowCodec Reference Decoder (libtfc)
+ * Copyright (c) 2025–2026 Rich Chau. Licensed under the MIT License.
+ */
+
 #include "tfc.h"
 
 #include <stdio.h>

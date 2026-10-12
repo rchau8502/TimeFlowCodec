@@ -1,16 +1,37 @@
-MIT License
+# TimeFlowCodec Software License Agreement
 
-Copyright (c) 2025 Rich Chau
+Copyright (c) 2025–2026 Rich Chau. All rights reserved.
+
+This repository and its distribution artifacts contain multiple distinct components
+governed by the corresponding licensing terms set forth below:
+
+1. **Core Reference Codec, C Decoder & Libraries (`libtfc`, `timeflowcodec` core, `web/` WASM player)**:
+   Licensed under the permissive **MIT License** (Section 1).
+2. **Standalone Desktop Application & GUI (`TimeFlowCodec.app`, `gui.py`, `timeflowcodec/player.py`)**:
+   Licensed under the **Proprietary Desktop Application License** (Section 2).
+3. **Academic Publications, Monograph & Presentation Materials (`main.tex`, `paper/`, `presentation_pdfs/`)**:
+   Copyright (c) 2025–2026 Rich Chau. All rights reserved.
+
+---
+
+## Section 1: Core Codec & Reference Library (MIT License)
+
+Applies to:
+- `libtfc/` (ANSI C99 reference decoder and WebAssembly builds)
+- `timeflowcodec/` core encoder, container v5 parser/serializer, motion regression, and CLI tools (`tfc`)
+- `web/` (HTML5 / WebAssembly canvas player engine)
+
+Copyright (c) 2025–2026 Rich Chau
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
+of the core software and associated documentation files (the "Core Software"), to deal
+in the Core Software without restriction, including without limitation the rights
 to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
+copies of the Core Software, and to permit persons to whom the Core Software is
 furnished to do so, subject to the following conditions:
 
 The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+copies or substantial portions of the Core Software.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -19,3 +40,29 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+---
+
+## Section 2: Standalone Desktop Application & GUI License (Proprietary — All Rights Reserved)
+
+Applies to:
+- TimeFlowCodec Desktop GUI Application (`gui.py`, `timeflowcodec/player.py`)
+- Standalone packaged application bundles (`TimeFlowCodec.app`, Windows `.exe`, DMG / PKG installers)
+- Application branding, iconography, and custom graphical interface designs
+
+Copyright (c) 2025–2026 Rich Chau. All rights reserved.
+
+1. **Grant of Personal and Evaluation License:**
+   The copyright holder grants you a non-exclusive, non-transferable, revocable license to
+   download, compile, and run the Desktop Application for personal, educational, and
+   non-commercial evaluation purposes.
+
+2. **Proprietary Restrictions:**
+   Except as expressly authorized in writing by Rich Chau, you may NOT:
+   - Sublicense, sell, lease, rent, redistribute, or commercially exploit the Desktop Application binaries.
+   - Remove, obscure, or alter any copyright notices, branding, or proprietary markings on the Desktop Application.
+   - Package, re-brand, or bundle the Desktop Application into commercial software products without a commercial license agreement.
+
+3. **Commercial Licensing & Inquiries:**
+   For commercial licensing, enterprise VDI/screen capture integration, or custom distribution rights,
+   contact Rich Chau at: richc3@uci.edu

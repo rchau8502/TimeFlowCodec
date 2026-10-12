@@ -1,4 +1,8 @@
-"""Desktop GUI for TimeFlowCodec with Apple Silicon-friendly defaults."""
+"""TimeFlowCodec Desktop GUI Application.
+
+Copyright (c) 2025–2026 Rich Chau. All rights reserved.
+Proprietary Desktop Application License (see LICENSE Section 2).
+"""
 
 from __future__ import annotations
 
@@ -435,6 +439,7 @@ class MainWindow(QMainWindow):
         badges.setSpacing(10)
         badges.addWidget(self._make_badge("Checked size targets"))
         badges.addWidget(self._make_badge(get_version_string()))
+        badges.addWidget(self._make_badge("© 2025–2026 Rich Chau"))
         if self.apple_silicon:
             badges.addWidget(self._make_badge("Apple Silicon detected"))
             badges.addWidget(self._make_badge("Mac profile recommended"))

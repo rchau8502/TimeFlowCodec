@@ -7,7 +7,7 @@ name = "timeflowcodec"
 version = "2.0.0"
 description = "Per-pixel RGB temporal function codec (CONST/LINEAR per channel with raw fallback)."
 readme = "README.md"
-authors = [{ name = "Applied Math Thesis" }]
+authors = [{ name = "Rich Chau", email = "richc3@uci.edu" }]
 license = { file = "LICENSE" }
 requires-python = ">=3.9"
 dependencies = [
