@@ -1,9 +1,22 @@
 CC ?= clang
 CFLAGS ?= -O3 -Wall -Wextra -std=c99 -Iinclude -DHAVE_ZLIB=1
-LDFLAGS ?= -lz
+LDFLAGS ?= -lz -lm
 
-ZSTD_INC ?= $(shell if [ -f /opt/homebrew/opt/zstd/include/zstd.h ]; then echo "-I/opt/homebrew/opt/zstd/include -DHAVE_ZSTD=1"; elif [ -f /opt/anaconda3/include/zstd.h ]; then echo "-I/opt/anaconda3/include -DHAVE_ZSTD=1"; elif [ -f /usr/include/zstd.h ] || [ -f /usr/local/include/zstd.h ]; then echo "-DHAVE_ZSTD=1"; fi)
-ZSTD_LIB ?= $(shell if [ -f /opt/homebrew/opt/zstd/lib/libzstd.dylib ] || [ -f /opt/homebrew/opt/zstd/lib/libzstd.a ]; then echo "-L/opt/homebrew/opt/zstd/lib -lzstd"; elif [ -f /opt/anaconda3/lib/libzstd.dylib ]; then echo "-L/opt/anaconda3/lib -lzstd"; elif [ -f /usr/lib/libzstd.so ] || [ -f /usr/local/lib/libzstd.so ]; then echo "-lzstd"; fi)
+# Auto-detect zstd via pkg-config or standard paths
+ZSTD_PKG_CFLAGS := $(shell pkg-config --cflags libzstd 2>/dev/null)
+ZSTD_PKG_LIBS := $(shell pkg-config --libs libzstd 2>/dev/null)
+
+ifneq ($(ZSTD_PKG_LIBS),)
+  ZSTD_INC ?= $(ZSTD_PKG_CFLAGS) -DHAVE_ZSTD=1
+  ZSTD_LIB ?= $(ZSTD_PKG_LIBS)
+else
+  ZSTD_INC ?= $(shell if [ -f /opt/homebrew/opt/zstd/include/zstd.h ]; then echo "-I/opt/homebrew/opt/zstd/include -DHAVE_ZSTD=1"; \
+                      elif [ -f /opt/anaconda3/include/zstd.h ]; then echo "-I/opt/anaconda3/include -DHAVE_ZSTD=1"; \
+                      elif [ -f /usr/include/zstd.h ] || [ -f /usr/local/include/zstd.h ]; then echo "-DHAVE_ZSTD=1"; fi)
+  ZSTD_LIB ?= $(shell if [ -f /opt/homebrew/opt/zstd/lib/libzstd.dylib ] || [ -f /opt/homebrew/opt/zstd/lib/libzstd.a ]; then echo "-L/opt/homebrew/opt/zstd/lib -lzstd"; \
+                      elif [ -f /opt/anaconda3/lib/libzstd.dylib ]; then echo "-L/opt/anaconda3/lib -lzstd"; \
+                      elif [ -f /usr/include/zstd.h ] || [ -f /usr/local/include/zstd.h ] || [ -f /usr/lib/libzstd.so ] || [ -f /usr/local/lib/libzstd.so ] || [ -n "$$(ls /usr/lib/*-linux-gnu/libzstd.so 2>/dev/null)" ]; then echo "-lzstd"; fi)
+endif
 
 CFLAGS += $(ZSTD_INC)
 LDFLAGS += $(ZSTD_LIB)

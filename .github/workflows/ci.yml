@@ -12,6 +12,8 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
         python-version: ["3.11"]
+    env:
+      QT_QPA_PLATFORM: offscreen
     steps:
       - uses: actions/checkout@v4
         with:
@@ -40,7 +42,7 @@ jobs:
           ./build/tfc_dec --help || true
           cd ..
       - name: Unit tests
-        run: pytest
+        run: pytest -v -o faulthandler_timeout=120
       - name: Smoke CLI
         run: |
           python -m timeflowcodec -h || true

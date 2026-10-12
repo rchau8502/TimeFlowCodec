@@ -181,6 +181,7 @@ class PlayerWindow(QMainWindow):
             return
         self._read_error()
         self.process = None
+        process.setParent(None)
         process.deleteLater()
         self.cancel_button.setEnabled(False)
         try:
@@ -225,6 +226,7 @@ class PlayerWindow(QMainWindow):
                         self.process = process
                         self.status.setText("Waiting for the decoder to stop…")
                         return False
+            process.setParent(None)
             process.deleteLater()
         self.cancel_button.setEnabled(False)
         return True
