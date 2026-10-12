@@ -340,10 +340,27 @@ tfc_status_t tfc_decode_v3_v4_memory(
         size_t pixel_stride = (hdr.color_format == TFC_COLOR_RGB) ? 3 : 1;
         size_t row_stride = (hdr.color_format == TFC_COLOR_RGB) ? ((size_t)W * 3) : (size_t)cur_W;
 
+        uint8_t *modes = (uint8_t *)malloc(expected_logical);
+        float *intercept = (float *)malloc(expected_logical * sizeof(float));
+        float *slope = (float *)malloc(expected_logical * sizeof(float));
+        int *is_raw = (int *)malloc(expected_logical * sizeof(int));
+        int *raw_idx_map = (int *)malloc(expected_logical * sizeof(int));
+        if (!modes || !intercept || !slope || !is_raw || !raw_idx_map) {
+            if (modes) free(modes);
+            if (intercept) free(intercept);
+            if (slope) free(slope);
+            if (is_raw) free(is_raw);
+            if (raw_idx_map) free(raw_idx_map);
+            free(decompressed);
+            for (int k = 0; k < 3; ++k) free(plane_bufs[k]);
+            return TFC_ERR_OUT_OF_MEMORY;
+        }
+
         uint32_t frame_cursor = 0;
         for (uint32_t s = 0; s < seg_count; ++s) {
             uint32_t seg_hdr_size = (hdr.version == 4) ? 36 : 32;
             if (p_left < seg_hdr_size) {
+                free(modes); free(intercept); free(slope); free(is_raw); free(raw_idx_map);
                 free(decompressed);
                 for (int k = 0; k < 3; ++k) free(plane_bufs[k]);
                 return TFC_ERR_CORRUPT_STREAM;
@@ -360,26 +377,22 @@ tfc_status_t tfc_decode_v3_v4_memory(
             p += seg_hdr_size; p_left -= seg_hdr_size;
 
             if (logical_count != expected_logical) {
+                free(modes); free(intercept); free(slope); free(is_raw); free(raw_idx_map);
                 free(decompressed);
                 for (int k = 0; k < 3; ++k) free(plane_bufs[k]);
                 return TFC_ERR_CORRUPT_STREAM;
             }
             if (p_left < mode_len) {
+                free(modes); free(intercept); free(slope); free(is_raw); free(raw_idx_map);
                 free(decompressed);
                 for (int k = 0; k < 3; ++k) free(plane_bufs[k]);
                 return TFC_ERR_CORRUPT_STREAM;
             }
 
-            uint8_t *modes = (uint8_t *)malloc(logical_count);
-            if (!modes) {
-                free(decompressed);
-                for (int k = 0; k < 3; ++k) free(plane_bufs[k]);
-                return TFC_ERR_OUT_OF_MEMORY;
-            }
             status = decode_rle_modes(p, mode_len, modes, logical_count);
             p += mode_len; p_left -= mode_len;
             if (status != TFC_OK) {
-                free(modes);
+                free(modes); free(intercept); free(slope); free(is_raw); free(raw_idx_map);
                 free(decompressed);
                 for (int k = 0; k < 3; ++k) free(plane_bufs[k]);
                 return status;
@@ -388,7 +401,7 @@ tfc_status_t tfc_decode_v3_v4_memory(
             if (has_mvs) {
                 size_t mvs_len = (size_t)(seg_len - 1) * logical_count;
                 if (p_left < mvs_len) {
-                    free(modes);
+                    free(modes); free(intercept); free(slope); free(is_raw); free(raw_idx_map);
                     free(decompressed);
                     for (int k = 0; k < 3; ++k) free(plane_bufs[k]);
                     return TFC_ERR_CORRUPT_STREAM;
@@ -397,16 +410,74 @@ tfc_status_t tfc_decode_v3_v4_memory(
                 p += mvs_len; p_left -= mvs_len;
             }
 
-            float *intercept = (float *)calloc(logical_count, sizeof(float));
-            float *slope = (float *)calloc(logical_count, sizeof(float));
-            int *is_raw = (int *)calloc(logical_count, sizeof(int));
-            int *raw_idx_map = (int *)calloc(logical_count, sizeof(int));
-            if (!intercept || !slope || !is_raw || !raw_idx_map) {
-                free(modes); free(intercept); free(slope); free(is_raw); free(raw_idx_map);
-                free(decompressed);
-                for (int k = 0; k < 3; ++k) free(plane_bufs[k]);
-                return TFC_ERR_OUT_OF_MEMORY;
+            /* Fast path: pure 1-frame CONST segment (e.g. from native spatial compaction) */
+            if (seg_len == 1 && const_count == logical_count && linear_count == 0 && raw_count == 0) {
+                if (p_left < const_count) {
+                    free(modes); free(intercept); free(slope); free(is_raw); free(raw_idx_map);
+                    free(decompressed);
+                    for (int k = 0; k < 3; ++k) free(plane_bufs[k]);
+                    return TFC_ERR_CORRUPT_STREAM;
+                }
+                const uint8_t *const_vals = p;
+                p += const_count; p_left -= const_count;
+
+                if (frame_cursor < T) {
+                    uint8_t *frame_ptr = frame_base + (size_t)frame_cursor * frame_stride;
+                    if (tile_size == 1) {
+                        if (pixel_stride == 1) {
+                            memcpy(frame_ptr, const_vals, logical_count);
+                        } else if (pixel_stride == 3) {
+                            uint32_t i = 0;
+                            for (; i + 8 <= logical_count; i += 8) {
+                                uint8_t *p_out = frame_ptr + (size_t)i * 3;
+                                p_out[0]  = const_vals[i];
+                                p_out[3]  = const_vals[i + 1];
+                                p_out[6]  = const_vals[i + 2];
+                                p_out[9]  = const_vals[i + 3];
+                                p_out[12] = const_vals[i + 4];
+                                p_out[15] = const_vals[i + 5];
+                                p_out[18] = const_vals[i + 6];
+                                p_out[21] = const_vals[i + 7];
+                            }
+                            for (; i < logical_count; ++i) {
+                                frame_ptr[(size_t)i * 3] = const_vals[i];
+                            }
+                        }
+                    } else {
+                        for (uint32_t ty = 0; ty < tiles_y; ++ty) {
+                            uint32_t y_start = ty * tile_size;
+                            uint32_t y_end = (y_start + tile_size < cur_H) ? (y_start + tile_size) : cur_H;
+                            for (uint32_t tx = 0; tx < tiles_x; ++tx) {
+                                uint32_t idx = ty * tiles_x + tx;
+                                uint8_t byte_val = const_vals[idx];
+                                uint32_t x_start = tx * tile_size;
+                                uint32_t x_end = (x_start + tile_size < cur_W) ? (x_start + tile_size) : cur_W;
+                                uint32_t span = x_end - x_start;
+                                if (pixel_stride == 1) {
+                                    for (uint32_t y = y_start; y < y_end; ++y) {
+                                        uint8_t *row_ptr = frame_ptr + (size_t)y * row_stride + x_start;
+                                        memset(row_ptr, byte_val, span);
+                                    }
+                                } else {
+                                    for (uint32_t y = y_start; y < y_end; ++y) {
+                                        uint8_t *row_ptr = frame_ptr + (size_t)y * row_stride;
+                                        for (uint32_t x = x_start; x < x_end; ++x) {
+                                            row_ptr[(size_t)x * pixel_stride] = byte_val;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                frame_cursor += 1;
+                continue;
             }
+
+            memset(intercept, 0, logical_count * sizeof(float));
+            memset(slope, 0, logical_count * sizeof(float));
+            memset(is_raw, 0, logical_count * sizeof(int));
+            memset(raw_idx_map, 0, logical_count * sizeof(int));
 
             /* Read CONST stream */
             if (p_left < const_count) {
@@ -502,17 +573,57 @@ tfc_status_t tfc_decode_v3_v4_memory(
                     if (pixel_stride == 1 && raw_count == 0) {
                         uint32_t i = 0;
                         float32x4_t vt = vdupq_n_f32((float)t);
-                        for (; i + 4 <= logical_count; i += 4) {
-                            float32x4_t vi = vld1q_f32(intercept + i);
-                            float32x4_t vs = vld1q_f32(slope + i);
-                            float32x4_t vf = vmlaq_f32(vi, vs, vt);
-                            int32x4_t vi32 = vcvtnq_s32_f32(vf);
-                            int16x4_t vi16 = vqmovn_s32(vi32);
-                            uint8x8_t vu8 = vqmovun_s16(vcombine_s16(vi16, vi16));
-                            vst1_lane_u32((uint32_t *)(frame_ptr + i), vreinterpret_u32_u8(vu8), 0);
+                        for (; i + 8 <= logical_count; i += 8) {
+                            float32x4_t vi0 = vld1q_f32(intercept + i);
+                            float32x4_t vs0 = vld1q_f32(slope + i);
+                            float32x4_t vf0 = vmlaq_f32(vi0, vs0, vt);
+                            int32x4_t vi32_0 = vcvtnq_s32_f32(vf0);
+                            int16x4_t vi16_0 = vqmovn_s32(vi32_0);
+
+                            float32x4_t vi1 = vld1q_f32(intercept + i + 4);
+                            float32x4_t vs1 = vld1q_f32(slope + i + 4);
+                            float32x4_t vf1 = vmlaq_f32(vi1, vs1, vt);
+                            int32x4_t vi32_1 = vcvtnq_s32_f32(vf1);
+                            int16x4_t vi16_1 = vqmovn_s32(vi32_1);
+
+                            uint8x8_t vu8 = vqmovun_s16(vcombine_s16(vi16_0, vi16_1));
+                            vst1_u8(frame_ptr + i, vu8);
                         }
                         for (; i < logical_count; ++i) {
                             frame_ptr[i] = clamp_u8(intercept[i] + slope[i] * (float)t);
+                        }
+                    } else if (pixel_stride == 3 && raw_count == 0) {
+                        uint32_t i = 0;
+                        float32x4_t vt = vdupq_n_f32((float)t);
+                        for (; i + 8 <= logical_count; i += 8) {
+                            float32x4_t vi0 = vld1q_f32(intercept + i);
+                            float32x4_t vs0 = vld1q_f32(slope + i);
+                            float32x4_t vf0 = vmlaq_f32(vi0, vs0, vt);
+                            int32x4_t vi32_0 = vcvtnq_s32_f32(vf0);
+                            int16x4_t vi16_0 = vqmovn_s32(vi32_0);
+
+                            float32x4_t vi1 = vld1q_f32(intercept + i + 4);
+                            float32x4_t vs1 = vld1q_f32(slope + i + 4);
+                            float32x4_t vf1 = vmlaq_f32(vi1, vs1, vt);
+                            int32x4_t vi32_1 = vcvtnq_s32_f32(vf1);
+                            int16x4_t vi16_1 = vqmovn_s32(vi32_1);
+
+                            uint8x8_t vu8 = vqmovun_s16(vcombine_s16(vi16_0, vi16_1));
+                            uint8_t bytes[8];
+                            vst1_u8(bytes, vu8);
+
+                            uint8_t *p_out = frame_ptr + (size_t)i * 3;
+                            p_out[0]  = bytes[0];
+                            p_out[3]  = bytes[1];
+                            p_out[6]  = bytes[2];
+                            p_out[9]  = bytes[3];
+                            p_out[12] = bytes[4];
+                            p_out[15] = bytes[5];
+                            p_out[18] = bytes[6];
+                            p_out[21] = bytes[7];
+                        }
+                        for (; i < logical_count; ++i) {
+                            frame_ptr[(size_t)i * 3] = clamp_u8(intercept[i] + slope[i] * (float)t);
                         }
                     } else
 #endif
@@ -522,14 +633,13 @@ tfc_status_t tfc_decode_v3_v4_memory(
                             if (is_raw[i] && raw_residuals) {
                                 v += (float)raw_residuals[raw_idx_map[i] * seg_len + t] * raw_scale;
                             }
-                            frame_ptr[i * pixel_stride] = clamp_u8(v);
+                            frame_ptr[(size_t)i * pixel_stride] = clamp_u8(v);
                         }
                     }
                 } else {
                     for (uint32_t ty = 0; ty < tiles_y; ++ty) {
                         uint32_t y_start = ty * tile_size;
-                        uint32_t y_end = y_start + tile_size;
-                        if (y_end > cur_H) y_end = cur_H;
+                        uint32_t y_end = (y_start + tile_size < cur_H) ? (y_start + tile_size) : cur_H;
 
                         for (uint32_t tx = 0; tx < tiles_x; ++tx) {
                             uint32_t idx = ty * tiles_x + tx;
@@ -540,13 +650,20 @@ tfc_status_t tfc_decode_v3_v4_memory(
                             uint8_t byte_val = clamp_u8(v);
 
                             uint32_t x_start = tx * tile_size;
-                            uint32_t x_end = x_start + tile_size;
-                            if (x_end > cur_W) x_end = cur_W;
+                            uint32_t x_end = (x_start + tile_size < cur_W) ? (x_start + tile_size) : cur_W;
+                            uint32_t span = x_end - x_start;
 
-                            for (uint32_t y = y_start; y < y_end; ++y) {
-                                uint8_t *row_ptr = frame_ptr + (size_t)y * row_stride;
-                                for (uint32_t x = x_start; x < x_end; ++x) {
-                                    row_ptr[x * pixel_stride] = byte_val;
+                            if (pixel_stride == 1) {
+                                for (uint32_t y = y_start; y < y_end; ++y) {
+                                    uint8_t *row_ptr = frame_ptr + (size_t)y * row_stride + x_start;
+                                    memset(row_ptr, byte_val, span);
+                                }
+                            } else {
+                                for (uint32_t y = y_start; y < y_end; ++y) {
+                                    uint8_t *row_ptr = frame_ptr + (size_t)y * row_stride;
+                                    for (uint32_t x = x_start; x < x_end; ++x) {
+                                        row_ptr[(size_t)x * pixel_stride] = byte_val;
+                                    }
                                 }
                             }
                         }
@@ -556,13 +673,13 @@ tfc_status_t tfc_decode_v3_v4_memory(
 
             frame_cursor += seg_len;
             if (raw_residuals) free(raw_residuals);
-            free(modes);
-            free(intercept);
-            free(slope);
-            free(is_raw);
-            free(raw_idx_map);
         }
 
+        free(modes);
+        free(intercept);
+        free(slope);
+        free(is_raw);
+        free(raw_idx_map);
         free(decompressed);
     }
 

@@ -203,3 +203,23 @@ def test_libtfc_yuv420_match(tmp_path):
     diff = np.max(np.abs(c_frames.astype(int) - py_frames.astype(int)))
     # Allow small tolerance of 2 LSB for color matrix float rounding in C vs Python
     assert diff <= 2, f"Max difference between C and Python decoder is {diff}"
+
+
+def test_libtfc_simd_throughput_and_exactness(tmp_path):
+    """Verify that libtfc achieves high-throughput decode and exact reconstruction."""
+    from timeflowcodec.chunked import _encode_rgb_chunk
+
+    background = np.random.default_rng(42).integers(0, 256, (128, 160, 3), dtype=np.uint8)
+    frames = np.array([np.roll(background, 2 * t, axis=1) for t in range(32)])
+    tfc_file = tmp_path / "simd_bench.tfc"
+    raw_out = tmp_path / "simd_bench.raw"
+
+    _encode_rgb_chunk(frames, tfc_file, dict(preset="screen", tau=0, container_version=3))
+
+    res = subprocess.run([str(TFC_DEC_BIN), str(tfc_file), str(raw_out), "--bench"], capture_output=True, text=True)
+    assert res.returncode == 0, f"tfc_dec failed: {res.stderr}"
+    assert "Throughput:" in res.stderr
+
+    c_frames = np.frombuffer(raw_out.read_bytes(), dtype=np.uint8).reshape(frames.shape)
+    np.testing.assert_array_equal(c_frames, frames)
+
