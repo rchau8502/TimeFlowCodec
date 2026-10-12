@@ -5,14 +5,14 @@
 #include <string.h>
 #include <math.h>
 
-#if defined(HAVE_ZLIB) || defined(__APPLE__) || defined(__linux__)
+#if !defined(__wasm__) && (defined(HAVE_ZLIB) || defined(__APPLE__) || defined(__linux__))
 #include <zlib.h>
 #define TFC_HAS_ZLIB 1
 #else
 #define TFC_HAS_ZLIB 0
 #endif
 
-#if defined(HAVE_ZSTD)
+#if !defined(__wasm__) && defined(HAVE_ZSTD) && (HAVE_ZSTD != 0)
 #include <zstd.h>
 #define TFC_HAS_ZSTD 1
 #else
