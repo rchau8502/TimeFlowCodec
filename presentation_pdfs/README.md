@@ -12,7 +12,6 @@ This directory contains the complete suite of compiled presentation materials, a
 | **[`TimeFlowCodec_Presentation_Handout.pdf`](./TimeFlowCodec_Presentation_Handout.pdf)** | Print Handout | 10 pages | 2-on-1 Letter | Physical distribution to committee members, attendees, and reviewers. |
 | **[`TimeFlowCodec_Thesis_Monograph.pdf`](./TimeFlowCodec_Thesis_Monograph.pdf)** | Doctoral Thesis / Monograph | 55 pages | Single-column Report | Comprehensive mathematical foundations, Sobolev bounds, container specs, and benchmarks. |
 | **[`TimeFlowCodec_IEEE_Paper.pdf`](./TimeFlowCodec_IEEE_Paper.pdf)** | Conference Paper | 5 pages | Two-column IEEEtran | Peer-reviewed publication manuscript adhering to IEEE conference standards. |
-| **[`Rich_Chau_CV.pdf`](./Rich_Chau_CV.pdf)** | Academic Curriculum Vitae | 2 pages | Standard Letter | Academic background, research appointments, publications, and technical competencies. |
 
 ---
 
@@ -48,11 +47,6 @@ This directory contains the complete suite of compiled presentation materials, a
 * **Title:** *TimeFlowCodec: An Orthogonal Video Coding Paradigm for Screen and Synthetic Content via Per-Pixel Temporal Regression*
 * **Format:** IEEE conference publication format with figures, rate-distortion curves, benchmark tables, and citations.
 
-### 5. Academic CV (`Rich_Chau_CV.pdf`)
-* **Author:** Rich Chau
-* **Affiliation:** Department of Mathematics, University of California, Irvine
-* **Contact:** `richc3@uci.edu`
-
 ---
 
 ## Source Files & Recompilation Instructions
@@ -77,8 +71,4 @@ cd paper
 pdflatex -interaction=nonstopmode main.tex
 bibtex main
 pdflatex -interaction=nonstopmode main.tex
-
-# 4. Academic CV
-cd ../cv
-pdflatex -interaction=nonstopmode Rich_Chau_CV.tex
 ```
