@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "timeflowcodec"
-version = "1.0.0"
+version = "2.0.0"
 description = "Per-pixel RGB temporal function codec (CONST/LINEAR per channel with raw fallback)."
 readme = "README.md"
 authors = [{ name = "Applied Math Thesis" }]
