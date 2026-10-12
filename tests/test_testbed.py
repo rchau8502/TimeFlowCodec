@@ -61,3 +61,49 @@ def test_hpc_research_codec_execution():
         assert "execution_time_sec" in metrics
         assert metrics["input_bytes"] == input_file.stat().st_size
         assert metrics["output_bytes"] == output_file.stat().st_size
+
+
+def test_hpc_worker_claim_and_completion_pipeline(monkeypatch):
+    """Verify full HPC polling, claim, execute, and completion reporting pipeline."""
+    from unittest.mock import MagicMock
+
+    import testbed.hpc.hpc_worker as worker
+
+    mock_supabase = MagicMock()
+    mock_task = {
+        "id": "task-uuid-1234",
+        "media_storage_path": "uploads/user_hash/clip.mp4",
+        "user_hash": "user_hash_abc",
+        "target_engine": "TimeFlowCodec_v2",
+    }
+
+    mock_rpc = MagicMock()
+    mock_rpc.execute.return_value.data = [mock_task]
+    mock_supabase.rpc.return_value = mock_rpc
+
+    mock_table = MagicMock()
+    mock_table.update.return_value.eq.return_value.execute.return_value.data = [mock_task]
+    mock_supabase.table.return_value = mock_table
+
+    monkeypatch.setattr(worker, "supabase", mock_supabase)
+
+    claimed = worker.claim_next_pending_task()
+    assert claimed == mock_task
+    mock_supabase.rpc.assert_called_with("claim_next_hpc_task", {"p_worker_id": worker.WORKER_ID})
+
+    metrics = {"compression_ratio": 2.5, "execution_time_sec": 0.4}
+    worker.mark_task_completed("task-uuid-1234", "https://storage/result.tfc", metrics)
+    mock_supabase.table.assert_called_with("hpc_tasks")
+
+
+def test_hpc_worker_signal_shutdown():
+    """Verify SIGTERM/SIGINT signal triggers graceful shutdown flag."""
+    import signal
+
+    import testbed.hpc.hpc_worker as worker
+
+    worker.RUNNING = True
+    worker.handle_shutdown(signal.SIGTERM, None)
+    assert worker.RUNNING is False
+    worker.RUNNING = True  # reset for worker lifecycle
+
