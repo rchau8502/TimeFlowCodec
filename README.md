@@ -17,10 +17,13 @@
 
 ## Publication & Academic Research
 
-- **Master's Thesis Monograph:** [`TimeFlowCodec.pdf`](TimeFlowCodec.pdf) (55 pages, comprehensive mathematical derivations, architecture, complexity scaling, and JVET-SCC evaluations).
-- **IEEE Conference Paper:** [`paper/TimeFlowCodec_IEEE.pdf`](paper/TimeFlowCodec_IEEE.pdf) (5 pages, camera-ready double-column manuscript).
+All compiled presentation and academic PDF deliverables are gathered in the dedicated **[`presentation_pdfs/`](presentation_pdfs/)** directory:
+- **Presentation Slide Deck:** [`presentation_pdfs/TimeFlowCodec_Presentation_Slides.pdf`](presentation_pdfs/TimeFlowCodec_Presentation_Slides.pdf) (20-slide 16:9 widescreen LaTeX Beamer presentation).
+- **Printable Presentation Handout:** [`presentation_pdfs/TimeFlowCodec_Presentation_Handout.pdf`](presentation_pdfs/TimeFlowCodec_Presentation_Handout.pdf) (10-page 2-on-1 handout layout for print & review).
+- **Master's Thesis Monograph:** [`presentation_pdfs/TimeFlowCodec_Thesis_Monograph.pdf`](presentation_pdfs/TimeFlowCodec_Thesis_Monograph.pdf) / [`TimeFlowCodec.pdf`](TimeFlowCodec.pdf) (55 pages, mathematical derivations, container v5 specs, and benchmarks).
+- **IEEE Conference Paper:** [`presentation_pdfs/TimeFlowCodec_IEEE_Paper.pdf`](presentation_pdfs/TimeFlowCodec_IEEE_Paper.pdf) / [`paper/TimeFlowCodec_IEEE.pdf`](paper/TimeFlowCodec_IEEE.pdf) (5 pages, camera-ready double-column manuscript).
+- **Academic CV:** [`presentation_pdfs/Rich_Chau_CV.pdf`](presentation_pdfs/Rich_Chau_CV.pdf) (2 pages, Rich Chau, UC Irvine Department of Mathematics).
 - **Interactive Defense Presentation:** [`presentation/index.html`](presentation/index.html) (20 slides with embedded interactive 1D Gibbs overshoot & pixel loupe inspector).
-- **Presentation Slide Deck:** [`presentation/presentation.pdf`](presentation/presentation.pdf) (20-slide LaTeX Beamer presentation).
 - **Defense Script & Q&A:** [`presentation/SPEAKER_NOTES.md`](presentation/SPEAKER_NOTES.md) (Slide-by-slide 19-minute script + committee Q&A defense guide).
 
 ## Compression status and measured evidence
