@@ -350,6 +350,15 @@ def main(argv: list[str] | None = None) -> None:
     )
     p_dec.add_argument("--threads", type=int, default=1, help="Number of worker threads (0=auto)")
 
+    p_cap = sub.add_parser("capture", help="Live desktop screen capture into streaming .tfc container")
+    p_cap.add_argument("output", help="Output .tfc file path")
+    p_cap.add_argument("--fps", type=int, default=30, help="Target capture frame rate (default: 30)")
+    p_cap.add_argument("--scale", type=int, default=1280, help="Horizontal resolution scale (default: 1280, 0=native)")
+    p_cap.add_argument("--duration", type=float, default=None, help="Capture duration in seconds (default: unlimited)")
+    p_cap.add_argument("--chunk-frames", type=int, default=30, help="Frames per streaming chunk (default: 30)")
+    p_cap.add_argument("--preset", type=str, default="screen", choices=["screen", "anime", "general"])
+    p_cap.add_argument("--device", type=str, default=None, help="Custom capture device identifier")
+
     args = parser.parse_args(argv)
 
     if getattr(args, "version", False):
@@ -367,8 +376,20 @@ def main(argv: list[str] | None = None) -> None:
             stream_output=args.stream_output,
             threads=args.threads,
         )
+    elif args.cmd == "capture":
+        from .capture import capture_screen_to_tfc
+        scale_w = None if args.scale == 0 else args.scale
+        capture_screen_to_tfc(
+            output_path=args.output,
+            fps=args.fps,
+            scale_width=scale_w,
+            duration=args.duration,
+            chunk_frames=args.chunk_frames,
+            preset=args.preset,
+            device=args.device,
+        )
     else:
-        parser.error("Specify 'encode'/'decode' (or 'compress'/'decompress').")
+        parser.error("Specify 'encode', 'decode', or 'capture'.")
 
 
 if __name__ == "__main__":
