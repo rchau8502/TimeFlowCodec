@@ -34,3 +34,18 @@ $(TARGET_BIN): $(SRC_DIR)/tfc_dec.c $(TARGET_LIB) | $(BUILD_DIR)
 
 clean:
 	rm -rf $(BUILD_DIR)
+
+WASM_CC ?= /opt/homebrew/opt/llvm/bin/clang
+WASM_LD ?= /opt/homebrew/bin/wasm-ld
+WASI_SYSROOT ?= /opt/homebrew/share/wasi-sysroot
+WASM_TARGET ?= ../web/libtfc.wasm
+
+wasm: $(WASM_TARGET)
+
+$(WASM_TARGET): $(SRC_DIR)/tfc_decoder.c $(SRC_DIR)/tfc_wasm.c $(SRC_DIR)/wasm_rt.c $(INC_DIR)/tfc.h | $(BUILD_DIR)
+	$(WASM_CC) --target=wasm32-wasip1 --sysroot=$(WASI_SYSROOT) -c -O3 -I$(INC_DIR) -DHAVE_ZLIB=0 -DHAVE_ZSTD=0 $(SRC_DIR)/tfc_decoder.c -o $(BUILD_DIR)/tfc_decoder_wasm.o
+	$(WASM_CC) --target=wasm32-wasip1 --sysroot=$(WASI_SYSROOT) -c -O3 -I$(INC_DIR) -DHAVE_ZLIB=0 -DHAVE_ZSTD=0 $(SRC_DIR)/tfc_wasm.c -o $(BUILD_DIR)/tfc_wasm.o
+	$(WASM_CC) --target=wasm32-wasip1 --sysroot=$(WASI_SYSROOT) -c -O3 $(SRC_DIR)/wasm_rt.c -o $(BUILD_DIR)/wasm_rt.o
+	mkdir -p ../web
+	$(WASM_LD) --no-entry --export-all -O3 $(BUILD_DIR)/tfc_decoder_wasm.o $(BUILD_DIR)/tfc_wasm.o $(BUILD_DIR)/wasm_rt.o -L$(WASI_SYSROOT)/lib/wasm32-wasip1 -lc -lm -o $(WASM_TARGET)
+
