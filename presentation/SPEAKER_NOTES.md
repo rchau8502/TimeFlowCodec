@@ -1,7 +1,7 @@
 # TimeFlowCodec: Research Defense & Presentation Guide
 
 **Author:** Rich Chau  
-**Institution:** Department of Computer Science, University of California, Irvine  
+**Institution:** Department of Mathematics, University of California, Irvine  
 **Title:** *TimeFlowCodec: A Per-Pixel Temporal Function Video Codec*  
 **Formats Available:**
 - LaTeX Beamer Slides: `presentation/presentation.pdf` (compiled from `presentation/presentation.tex`)
