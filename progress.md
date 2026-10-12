@@ -309,4 +309,28 @@ legacy segment RGB allocation even in streaming-export mode.
 - Compiled camera-ready IEEE conference manuscript `paper/TimeFlowCodec_IEEE.pdf` and synchronized root `TimeFlowCodec_Manuscript.pdf` (5 pages).
 - Packaged complete arXiv submission bundle `paper/arxiv_submission.tar.gz` with IEEEtran class, bibliography, and vector figures.
 
+## 2026-10-12: production expansion (PyPI 2.0.0, NEON 1,748 FPS, WebAssembly Canvas Player, and Testbed Pipeline)
+
+- Pillar 1: PyPI 2.0.0 Packaging & Binary Wheel Distribution:
+  - Bumped version to `2.0.0` in `pyproject.toml` and `timeflowcodec/version.py`.
+  - Built official sdist and wheel: `timeflowcodec-2.0.0.tar.gz` and `timeflowcodec-2.0.0-py3-none-any.whl`.
+  - Verified installation, CLI entrypoints (`tfc --version`), and clean import in an isolated virtual environment.
+- Pillar 2: High-Throughput ARM NEON Vectorization in `libtfc`:
+  - Implemented 3-lane RGB interleaved vector store and 1-frame CONST fast-path in `libtfc/src/tfc_decoder.c`.
+  - Reused scratch arrays across segments to eliminate per-segment `calloc`/`free` overhead.
+  - Achieved **1,748.84 FPS (1,178.42 MB/s RGB24)** decode throughput on spatial chunks and **840.76 FPS** on standard benchmark inputs.
+  - Verified bit-for-bit exact reconstruction in `tests/test_libtfc.py` (`test_libtfc_simd_throughput_and_exactness`).
+- Pillar 3: WebAssembly Decoder Core (`libtfc.wasm`) & In-Browser `<canvas>` Player:
+  - Created C-to-WASM bridge `libtfc/src/tfc_wasm.c` and compiler runtime builtins `libtfc/src/wasm_rt.c`.
+  - Added `make wasm` target in `libtfc/Makefile` compiling standalone 76 KB `web/libtfc.wasm`.
+  - Created interactive HTML5 Canvas video player `web/index.html` and runtime driver `web/tfc_player.js`.
+  - Added Node.js/pytest integration test `tests/test_wasm_build.py` verifying WASM header and exported decoding APIs.
+- Pillar 4: Double-Blind Research Testbed Simulation Suite:
+  - Expanded `tests/test_testbed.py` with mock Supabase RPC claiming, Slurm worker task execution, and result uploading.
+  - Validated graceful preemption handling under SIGTERM/SIGINT signals.
+- Comprehensive Verification:
+  - Full test suite: **230 passed, 1 skipped, 0 failed** across 32 test modules.
+  - Ruff linter: **100% clean** across all modules, tests, scripts, and web runtimes.
+
+
 

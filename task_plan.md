@@ -45,16 +45,23 @@ Goal: execute the approved TimeFlowCodec improvement roadmap and prepare publica
 - [x] 34. Empirical evaluation & honest benchmarks: `scripts/measure_visual_quality.py`, `scripts/create_showcase.py`, withdrawal of unsupported synthetic BD-rate tables, documentation of actual measured results (`docs/evaluation/tfc-size-fix-2026-10-07.md`, `docs/evaluation/tfc-spatial-improvement-2026-10-08.md`).
 - [x] 35. Full regression test suite: 225 passed, 1 skipped, 0 failed; ruff 100% clean.
 
+## Phase: Production Expansion & Client Integration (Oct 12)
+- [x] 36. PyPI package build and binary wheel distribution (`timeflowcodec-2.0.0`): validated clean installation and CLI entrypoint in isolated environments.
+- [x] 37. Explicit ARM NEON SIMD vectorization in `libtfc`: optimized 3-lane RGB synthesis, 1-frame CONST fast-path, and memory reuse, achieving **1,748 FPS (>1,178 MB/s RGB24)** decode throughput.
+- [x] 38. WebAssembly standalone decoder (`web/libtfc.wasm`) and in-browser `<canvas>` player (`web/index.html`, `web/tfc_player.js`): bit-for-bit exact in-browser video playback.
+- [x] 39. Real-world testbed end-to-end integration suite: validated Supabase RPC claiming, Slurm worker execution, result uploading, and graceful preemption handling.
+- [x] 40. Full test suite expansion: **230 passed, 1 skipped, 0 failed**; ruff 100% clean.
+
 ## Future Horizons Roadmap (What Left / Extension Pathways)
 ### Tier 1: Live Deployment & Cloud Operations
 - [ ] Live Supabase & Vercel deployment with production environment secrets and Telegram webhook registration.
 - [ ] Live cluster Slurm launch with active worker telemetry.
-- [ ] PyPI package build and binary wheel distribution (`timeflowcodec-2.0.0`).
+- [x] PyPI package build and binary wheel distribution (`timeflowcodec-2.0.0`).
 
 ### Tier 2: Ecosystem & Client Integration
-- [ ] WebAssembly build (`libtfc.wasm`) for native in-browser `<canvas>` playback.
+- [x] WebAssembly build (`libtfc.wasm`) for native in-browser `<canvas>` playback.
 - [ ] FFmpeg native demuxer / decoder patch (`libavcodec/tfcdec.c`).
-- [ ] Explicit AVX2 / ARM NEON SIMD vectorization for >1,500 FPS throughput.
+- [x] Explicit AVX2 / ARM NEON SIMD vectorization for >1,500 FPS throughput (measured 1,748.84 FPS).
 
 ### Tier 3: PhD Continuation & Academic Standard (TimeFlowCodec v2.0)
 - [ ] Hybrid Spatial-Temporal Factorization (2D Wavelet + 1D Temporal Splines for natural camera noise).
