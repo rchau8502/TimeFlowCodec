@@ -1,0 +1,15 @@
+scene,codec_settings,container_bytes,exact_rgb,max_rgb_error,rgb_psnr_db
+linear_color,FFV1 lossless master,29005591,True,0,
+linear_color,TFC native RGB,49948,True,0,
+linear_color,H.264 RGB lossless,10998800,True,0,
+linear_color,AV1 RGB lossless,913981,True,0,
+linear_color,H.264 YUV444 CRF 18,274262,False,56,36.05730369028642
+linear_color,H.264 YUV420 CRF 23,134383,False,119,25.093174472785268
+linear_color,HEVC YUV444 CRF 18,663181,False,41,38.1598601488445
+scrolling_cards,FFV1 lossless master,1566903,True,0,
+scrolling_cards,TFC native RGB,240365,True,0,
+scrolling_cards,H.264 RGB lossless,39718,True,0,
+scrolling_cards,AV1 RGB lossless,217467,True,0,
+scrolling_cards,H.264 YUV444 CRF 18,36513,False,60,48.120311339894656
+scrolling_cards,H.264 YUV420 CRF 23,34088,False,86,39.28257463755325
+scrolling_cards,HEVC YUV444 CRF 18,34594,False,28,49.26735142566962

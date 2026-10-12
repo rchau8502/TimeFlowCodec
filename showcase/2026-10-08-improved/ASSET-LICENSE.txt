@@ -1,0 +1,5 @@
+Newly generated videos, images, and presentation assets in this package: CC0 1.0 Universal.
+To the extent copyright exists, these new media assets are dedicated to the public domain under CC0 1.0.
+https://creativecommons.org/publicdomain/zero/1.0/
+No third-party footage, music, logos, artwork, or font files were incorporated.
+The TimeFlowCodec software and included reproduction code retain their separate MIT license.

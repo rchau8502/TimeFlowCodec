@@ -54,6 +54,18 @@ def test_libtfc_v3_exact_match(tmp_path):
     assert diff <= 1, f"Max difference between C and Python decoder is {diff}"
 
 
+@pytest.mark.parametrize("version", [3, 4])
+def test_libtfc_adaptive_spatial_chunk_is_exact(tmp_path, version):
+    from timeflowcodec.chunked import _encode_rgb_chunk
+
+    background = np.random.default_rng(20).integers(0, 256, (48, 64, 3), dtype=np.uint8)
+    frames = np.array([np.roll(background, 2 * t, axis=1) for t in range(16)])
+    encoded, raw = tmp_path / "spatial.tfc", tmp_path / "spatial.raw"
+    _encode_rgb_chunk(frames, encoded, dict(preset="screen", tau=0, container_version=version))
+    subprocess.run([str(TFC_DEC_BIN), str(encoded), str(raw)], check=True, capture_output=True)
+    np.testing.assert_array_equal(np.frombuffer(raw.read_bytes(), dtype=np.uint8).reshape(frames.shape), frames)
+
+
 def test_libtfc_v5_chunked_match(tmp_path):
     """Verify libtfc produces exact pixel matches for multi-chunk v5 containers."""
     source = tmp_path / "source.mp4"

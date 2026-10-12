@@ -265,3 +265,48 @@ legacy segment RGB allocation even in streaming-export mode.
 - Added testbed unit tests in `tests/test_testbed.py` covering HMAC hashing, edu email regex matching, and research codec execution.
 - Verified test suite: **192 passed, 1 skipped, 0 failed** in 23.26s. Ruff linter 100% clean.
 
+## 2026-10-07: native compression fixes, honest sizing, and size budget enforcement
+
+- Corrected wasteful residual integer scaling in `timeflowcodec/format.py`:
+  - Preserved integer residuals at unit scale by default rather than expanding across fractional 16-bit ranges.
+  - Implemented explicit residual step quantization (`q_step`) in v3/v4 writers/parsers.
+  - Added alternative payload compaction in `_compact_scan_payload`: tries zero predictors for fallback samples and picks smaller compressed payload directly.
+- Strict size and bitrate budget enforcement:
+  - Added `--max-output-ratio` (e.g. `0.4` for 60% savings target) and checked `--bitrate` target in `timeflowcodec/chunked.py`.
+  - Atomic preservation: if target cannot be met, temp files are removed and existing target is untouched.
+  - Preset defaults updated: default to full-resolution coding cells (`tiling=1`) instead of lossy 8x8 tile averaging.
+- Desktop GUI (`gui.py`) updates:
+  - Added "Size target" combo box (No larger than source, Require 60% savings, Allow larger files).
+  - Added "Residual quality step" spinbox.
+  - Formatted compression result messages with exact byte counts and percentage change.
+- Empirical evidence audit:
+  - Withdrew unverified BD-rate superiority tables from `README.md`.
+  - Updated `scripts/generate_research_figures.py` to plot saved measurements instead of hardcoded/invented arrays.
+  - Documented findings in `docs/evaluation/tfc-size-fix-2026-10-07.md` and `.json`.
+- Test suite expanded to 211 tests (all passing, 1 skipped).
+
+## 2026-10-08: adaptive native spatial compaction and visual quality screening
+
+- Adaptive native spatial compaction:
+  - Added `_encode_rgb_chunk` in `timeflowcodec/chunked.py`: compares temporal encoding against exact frame-order CONST segments in native syntax and chooses the smaller chunk.
+  - Preserves exact RGB bit-for-bit while exposing repeated spatial patterns to Zstandard compression (~48.1% size reduction on scrolling animation benchmark).
+  - Vectorized `unpack_modes` with NumPy bit shifts.
+  - Optimized Python decoder for 1-frame CONST segments: stores in NumPy arrays without per-pixel dictionaries.
+  - Verified full backward/forward compatibility with ANSI C reference decoder (`libtfc`).
+- Visual quality screening & CC0 showcase:
+  - Created `scripts/measure_visual_quality.py` for automated PSNR/SSIM evaluation against H.264 RGB baselines.
+  - Created `scripts/create_showcase.py` and generated CC0 showcase package under `showcase/2026-10-08-improved/`.
+  - Documented in `docs/evaluation/tfc-spatial-improvement-2026-10-08.md` and `tfc-visual-quality-2026-10-08.json`.
+- Added targeted test suites:
+  - `tests/test_compression_efficiency.py` (size controls, integer residuals, residual quantization, full-res presets).
+  - `tests/test_spatial_chunks.py` (spatial packing, moving texture selection, temporal model retention).
+  - `tests/test_showcase.py` (deterministic scene generation, hero exactness, metric validation).
+  - `tests/test_research_evidence.py` (saved measurement loading verification).
+- Full test suite: **225 passed, 1 skipped, 3 warnings** in 85.6s. Ruff 100% clean.
+
+## 2026-10-09: academic manuscript & camera-ready IEEE conference prep
+
+- Compiled camera-ready IEEE conference manuscript `paper/TimeFlowCodec_IEEE.pdf` and synchronized root `TimeFlowCodec_Manuscript.pdf` (5 pages).
+- Packaged complete arXiv submission bundle `paper/arxiv_submission.tar.gz` with IEEEtran class, bibliography, and vector figures.
+
+

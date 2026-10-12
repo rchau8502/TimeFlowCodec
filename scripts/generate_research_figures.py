@@ -3,6 +3,9 @@
 for the TimeFlowCodec research thesis and presentation.
 """
 
+import argparse
+import json
+import math
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -42,6 +45,9 @@ COLORS = {
 
 
 def save_fig(fig, base_name: str) -> None:
+    if not base_name.startswith("rd_") and base_name != "tfc_architecture_v5":
+        fig.text(.5, .005, "ILLUSTRATION — NOT MEASURED CODEC PERFORMANCE",
+                 ha="center", color="darkred", fontsize=10, weight="bold")
     pdf_path = FIG_DIR / f"{base_name}.pdf"
     png_path = FIG_DIR / f"{base_name}.png"
     fig.savefig(pdf_path, format="pdf", bbox_inches="tight", dpi=300)
@@ -50,176 +56,57 @@ def save_fig(fig, base_name: str) -> None:
     print(f"Generated {pdf_path.name} and {png_path.name}")
 
 
+REPORT_FILE = Path(__file__).resolve().parent.parent / "benchmarks/scc_results/scc_benchmark_results.json"
+
+
+def load_rd_points(path: Path, sequence: str) -> list[dict]:
+    """Read actual saved samples; never invent a rate/quality curve."""
+    report = json.loads(path.read_text())
+    points = [point for point in report["points"] if point["clip"] == sequence]
+    if not points:
+        raise ValueError(f"No measured points for {sequence} in {path}")
+    for point in points:
+        if not math.isfinite(point["rate_kbps"]) or point["rate_kbps"] <= 0:
+            raise ValueError("Measured rates must be positive and finite")
+    return points
+
+
+def plot_rd_points(sequence: str, filename: str, title: str) -> None:
+    points = load_rd_points(REPORT_FILE, sequence)
+    fig, axes = plt.subplots(1, 2, figsize=(11, 4.5))
+    for codec in sorted({point["codec"] for point in points}):
+        samples = [point for point in points if point["codec"] == codec]
+        for ax, metric in zip(axes, ("psnr", "ssim")):
+            finite = [point for point in samples if point.get(metric) is not None
+                      and math.isfinite(point[metric])]
+            if finite:
+                ax.scatter([point["rate_kbps"] for point in finite],
+                           [point[metric] for point in finite], label=codec)
+    for ax, metric in zip(axes, ("RGB PSNR (dB)", "Mean RGB SSIM")):
+        ax.set_xlabel("Measured bitrate (kbps)")
+        ax.set_ylabel(metric)
+        ax.grid(True)
+        ax.legend()
+    fig.suptitle(title + " — saved samples, not matched-quality conclusions")
+    fig.text(.5, .01, "Source: " + REPORT_FILE.name + "; perfect PSNR points omitted",
+             ha="center", fontsize=8)
+    save_fig(fig, filename)
+
+
 def plot_rd_ui() -> None:
-    """RD Curve for Screen/UI Video."""
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11, 4.5))
-
-    tfc_bitrate = [350, 520, 890, 1420]
-    tfc_psnr = [38.2, 42.6, 47.8, 52.4]
-    tfc_ssim = [0.978, 0.989, 0.993, 0.998]
-
-    x264_bitrate = [480, 820, 1650, 2900]
-    x264_psnr = [33.5, 37.8, 43.1, 47.9]
-    x264_ssim = [0.972, 0.985, 0.994, 0.998]
-
-    x265_bitrate = [390, 680, 1380, 2450]
-    x265_psnr = [36.1, 41.2, 46.8, 51.2]
-    x265_ssim = [0.980, 0.991, 0.997, 0.999]
-
-    av1_bitrate = [310, 510, 1020, 1850]
-    av1_psnr = [38.8, 44.5, 50.2, 54.8]
-    av1_ssim = [0.986, 0.994, 0.999, 1.000]
-
-    ax1.plot(tfc_bitrate, tfc_psnr, "o-", color=COLORS["tfc_screen"], label="TimeFlowCodec (Screen)", lw=2.5)
-    ax1.plot(av1_bitrate, av1_psnr, "s--", color=COLORS["av1"], label="AV1 (libaom, cpu-4)")
-    ax1.plot(x265_bitrate, x265_psnr, "^--", color=COLORS["x265"], label="HEVC (x265, med)")
-    ax1.plot(x264_bitrate, x264_psnr, "d--", color=COLORS["x264"], label="H.264 (x264, med)")
-    ax1.set_xlabel("Bitrate (kbps)")
-    ax1.set_ylabel("RGB PSNR (dB)")
-    ax1.set_title("Screen/UI: Rate vs. PSNR")
-    ax1.grid(True)
-    ax1.legend(loc="lower right")
-
-    ax2.plot(tfc_bitrate, tfc_ssim, "o-", color=COLORS["tfc_screen"], label="TimeFlowCodec (Screen)", lw=2.5)
-    ax2.plot(av1_bitrate, av1_ssim, "s--", color=COLORS["av1"], label="AV1 (libaom, cpu-4)")
-    ax2.plot(x265_bitrate, x265_ssim, "^--", color=COLORS["x265"], label="HEVC (x265, med)")
-    ax2.plot(x264_bitrate, x264_ssim, "d--", color=COLORS["x264"], label="H.264 (x264, med)")
-    ax2.set_xlabel("Bitrate (kbps)")
-    ax2.set_ylabel("Mean RGB SSIM")
-    ax2.set_title("Screen/UI: Rate vs. SSIM")
-    ax2.grid(True)
-    ax2.legend(loc="lower right")
-
-    save_fig(fig, "rd_ui")
+    plot_rd_points("scc_web_browsing", "rd_ui", "Synthetic scrolling UI")
 
 
 def plot_rd_slides() -> None:
-    """RD Curve for Slide Deck Video."""
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11, 4.5))
-
-    tfc_bitrate = [85, 140, 260, 490]
-    tfc_psnr = [41.5, 46.8, 51.2, 56.4]
-    tfc_ssim = [0.988, 0.995, 0.998, 0.999]
-
-    av1_bitrate = [110, 195, 380, 720]
-    av1_psnr = [42.0, 47.5, 52.8, 57.0]
-    av1_ssim = [0.990, 0.996, 0.999, 1.000]
-
-    x265_bitrate = [140, 250, 480, 910]
-    x265_psnr = [38.5, 43.8, 48.9, 53.5]
-    x265_ssim = [0.982, 0.992, 0.997, 0.999]
-
-    x264_bitrate = [190, 340, 690, 1320]
-    x264_psnr = [35.2, 40.1, 45.4, 50.1]
-    x264_ssim = [0.975, 0.988, 0.995, 0.998]
-
-    ax1.plot(tfc_bitrate, tfc_psnr, "o-", color=COLORS["tfc_screen"], label="TimeFlowCodec (Screen)", lw=2.5)
-    ax1.plot(av1_bitrate, av1_psnr, "s--", color=COLORS["av1"], label="AV1 (libaom)")
-    ax1.plot(x265_bitrate, x265_psnr, "^--", color=COLORS["x265"], label="HEVC (x265)")
-    ax1.plot(x264_bitrate, x264_psnr, "d--", color=COLORS["x264"], label="H.264 (x264)")
-    ax1.set_xlabel("Bitrate (kbps)")
-    ax1.set_ylabel("RGB PSNR (dB)")
-    ax1.set_title("Slide Deck: Rate vs. PSNR")
-    ax1.grid(True)
-    ax1.legend(loc="lower right")
-
-    ax2.plot(tfc_bitrate, tfc_ssim, "o-", color=COLORS["tfc_screen"], label="TimeFlowCodec (Screen)", lw=2.5)
-    ax2.plot(av1_bitrate, av1_ssim, "s--", color=COLORS["av1"], label="AV1 (libaom)")
-    ax2.plot(x265_bitrate, x265_ssim, "^--", color=COLORS["x265"], label="HEVC (x265)")
-    ax2.plot(x264_bitrate, x264_ssim, "d--", color=COLORS["x264"], label="H.264 (x264)")
-    ax2.set_xlabel("Bitrate (kbps)")
-    ax2.set_ylabel("Mean RGB SSIM")
-    ax2.set_title("Slide Deck: Rate vs. SSIM")
-    ax2.grid(True)
-    ax2.legend(loc="lower right")
-
-    save_fig(fig, "rd_slides")
+    plot_rd_points("scc_slideshow", "rd_slides", "Synthetic slides")
 
 
 def plot_rd_anime() -> None:
-    """RD Curve for Stylized / Flat Animation."""
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11, 4.5))
-
-    tfc_bitrate = [420, 780, 1450, 2600]
-    tfc_psnr = [31.2, 35.8, 40.5, 45.2]
-    tfc_ssim = [0.920, 0.952, 0.978, 0.991]
-
-    av1_bitrate = [340, 590, 1120, 2050]
-    av1_psnr = [34.5, 39.2, 44.1, 48.6]
-    av1_ssim = [0.945, 0.971, 0.989, 0.997]
-
-    x265_bitrate = [410, 720, 1390, 2500]
-    x265_psnr = [33.1, 37.8, 42.5, 47.0]
-    x265_ssim = [0.935, 0.963, 0.984, 0.995]
-
-    x264_bitrate = [520, 950, 1850, 3300]
-    x264_psnr = [30.5, 35.0, 39.8, 44.2]
-    x264_ssim = [0.915, 0.948, 0.975, 0.990]
-
-    ax1.plot(tfc_bitrate, tfc_psnr, "o-", color=COLORS["tfc_anime"], label="TimeFlowCodec (Anime)", lw=2.5)
-    ax1.plot(av1_bitrate, av1_psnr, "s--", color=COLORS["av1"], label="AV1 (libaom)")
-    ax1.plot(x265_bitrate, x265_psnr, "^--", color=COLORS["x265"], label="HEVC (x265)")
-    ax1.plot(x264_bitrate, x264_psnr, "d--", color=COLORS["x264"], label="H.264 (x264)")
-    ax1.set_xlabel("Bitrate (kbps)")
-    ax1.set_ylabel("RGB PSNR (dB)")
-    ax1.set_title("Animation: Rate vs. PSNR")
-    ax1.grid(True)
-    ax1.legend(loc="lower right")
-
-    ax2.plot(tfc_bitrate, tfc_ssim, "o-", color=COLORS["tfc_anime"], label="TimeFlowCodec (Anime)", lw=2.5)
-    ax2.plot(av1_bitrate, av1_ssim, "s--", color=COLORS["av1"], label="AV1 (libaom)")
-    ax2.plot(x265_bitrate, x265_ssim, "^--", color=COLORS["x265"], label="HEVC (x265)")
-    ax2.plot(x264_bitrate, x264_ssim, "d--", color=COLORS["x264"], label="H.264 (x264)")
-    ax2.set_xlabel("Bitrate (kbps)")
-    ax2.set_ylabel("Mean RGB SSIM")
-    ax2.set_title("Animation: Rate vs. SSIM")
-    ax2.grid(True)
-    ax2.legend(loc="lower right")
-
-    save_fig(fig, "rd_anime")
+    plot_rd_points("scc_animation_ui", "rd_anime", "Synthetic UI animation")
 
 
 def plot_rd_natural() -> None:
-    """RD Curve for Natural Footage."""
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11, 4.5))
-
-    tfc_bitrate = [1200, 2400, 4500, 7800]
-    tfc_psnr = [26.4, 29.8, 33.5, 37.2]
-    tfc_ssim = [0.810, 0.865, 0.912, 0.948]
-
-    av1_bitrate = [650, 1150, 2100, 3900]
-    av1_psnr = [31.5, 35.8, 40.2, 44.6]
-    av1_ssim = [0.902, 0.945, 0.973, 0.990]
-
-    x265_bitrate = [780, 1420, 2600, 4800]
-    x265_psnr = [30.1, 34.2, 38.6, 43.0]
-    x265_ssim = [0.885, 0.931, 0.965, 0.985]
-
-    x264_bitrate = [950, 1800, 3400, 6200]
-    x264_psnr = [28.5, 32.4, 36.8, 41.2]
-    x264_ssim = [0.860, 0.912, 0.952, 0.978]
-
-    ax1.plot(tfc_bitrate, tfc_psnr, "o-", color=COLORS["tfc_anime"], label="TimeFlowCodec (General/v4)", lw=2.5)
-    ax1.plot(av1_bitrate, av1_psnr, "s--", color=COLORS["av1"], label="AV1 (libaom)")
-    ax1.plot(x265_bitrate, x265_psnr, "^--", color=COLORS["x265"], label="HEVC (x265)")
-    ax1.plot(x264_bitrate, x264_psnr, "d--", color=COLORS["x264"], label="H.264 (x264)")
-    ax1.set_xlabel("Bitrate (kbps)")
-    ax1.set_ylabel("RGB PSNR (dB)")
-    ax1.set_title("Natural Footage: Rate vs. PSNR (Boundary Case)")
-    ax1.grid(True)
-    ax1.legend(loc="lower right")
-
-    ax2.plot(tfc_bitrate, tfc_ssim, "o-", color=COLORS["tfc_anime"], label="TimeFlowCodec (General/v4)", lw=2.5)
-    ax2.plot(av1_bitrate, av1_ssim, "s--", color=COLORS["av1"], label="AV1 (libaom)")
-    ax2.plot(x265_bitrate, x265_ssim, "^--", color=COLORS["x265"], label="HEVC (x265)")
-    ax2.plot(x264_bitrate, x264_ssim, "d--", color=COLORS["x264"], label="H.264 (x264)")
-    ax2.set_xlabel("Bitrate (kbps)")
-    ax2.set_ylabel("Mean RGB SSIM")
-    ax2.set_title("Natural Footage: Rate vs. SSIM (Boundary Case)")
-    ax2.grid(True)
-    ax2.legend(loc="lower right")
-
-    save_fig(fig, "rd_natural")
+    raise ValueError("No measured natural-video corpus is supplied; no curve can be generated")
 
 
 def plot_temporal_fitting_concept() -> None:
@@ -498,17 +385,24 @@ def plot_complexity_scaling() -> None:
 
 
 def main() -> None:
-    print("Generating research figures in", FIG_DIR)
+    global REPORT_FILE, FIG_DIR
+    parser = argparse.ArgumentParser(description="Plot saved codec measurements and labeled illustrations")
+    parser.add_argument("--results", type=Path, default=REPORT_FILE)
+    parser.add_argument("--out", type=Path, default=FIG_DIR)
+    parser.add_argument("--include-illustrations", action="store_true")
+    args = parser.parse_args()
+    REPORT_FILE, FIG_DIR = args.results, args.out
+    FIG_DIR.mkdir(parents=True, exist_ok=True)
     plot_rd_ui()
     plot_rd_slides()
     plot_rd_anime()
-    plot_rd_natural()
-    plot_temporal_fitting_concept()
-    plot_visual_artifacts()
-    plot_mode_distribution()
     plot_tfc_architecture()
-    plot_complexity_scaling()
-    print("All research figures successfully generated!")
+    if args.include_illustrations:
+        plot_temporal_fitting_concept()
+        plot_visual_artifacts()
+        plot_mode_distribution()
+        plot_complexity_scaling()
+    print("Generated saved measurement plots. Legacy PDFs require editorial revision.")
 
 
 if __name__ == "__main__":

@@ -134,10 +134,55 @@ def records(source, cancel_check=None, audio_path=None):
                 yield tag, data
 
 
-def encode(source, destination, options, cancel_check=None, progress_callback=None):
-    from .encoder import encode_video_to_tfc
+def _encode_rgb_chunk(frames, destination, options, cancel_check=None):
+    """Compare temporal coding with frame-order CONST segments in native syntax.
 
+    One-frame CONST segments expose spatial and repeated-frame patterns to the
+    payload compressor. They preserve original RGB exactly and are understood by
+    existing v3/v4 decoders. All three planes must use the same segmentation.
+    """
+    from .constants import COLOR_FORMAT_RGB, MODE_TFC_CONST
+    from .encoder import encode_video_to_tfc
+    from .format import _compress_payload, _rle_encode, pack_modes, read_header, write_header
+
+    encode_video_to_tfc(frames, str(destination), **options, cancel_check=cancel_check)
+    if options.get("q_step", 1) != 1 or frames.dtype != np.uint8:
+        return
+    with open(destination, "rb") as stream:
+        header = read_header(stream)
+    if (header["version"] not in (3, 4) or header["color_format"] != COLOR_FORMAT_RGB
+            or header["tiling"] > 1 or header["num_frames"] > 65535):
+        return
+    count = header["num_frames"]
+    logical_count = header["width"] * header["height"]
+    modes = _rle_encode(pack_modes(np.full(logical_count, MODE_TFC_CONST, dtype=np.uint8)))
+    values = (1, logical_count, len(modes), 1., 1., logical_count, 0, 0)
+    segment_header = struct.pack("<IIIffIII", *values) if header["version"] == 3 else struct.pack(
+        "<IIIffIIII", *values, 0)
+    payloads = []
+    for plane in range(3):
+        check_cancel(cancel_check)
+        parts = [struct.pack("<I", count)]
+        for frame in frames[:count]:
+            check_cancel(cancel_check)
+            parts.extend((segment_header, modes, frame[:, :, plane].tobytes()))
+        payloads.append(_compress_payload(b"".join(parts), header["payload_comp_type"]))
+    # v3/v4 have a 40-byte header and a uint32 length before each plane.
+    if 40 + 12 + sum(map(len, payloads)) >= Path(destination).stat().st_size:
+        return
+    header["segment_count"] = count
+    with atomic_destination(destination) as temporary, open(temporary, "wb") as output:
+        write_header(output, header)
+        for payload in payloads:
+            check_cancel(cancel_check)
+            output.write(struct.pack("<I", len(payload)))
+            output.write(payload)
+
+
+def encode(source, destination, options, cancel_check=None, progress_callback=None):
     check_cancel(cancel_check)
+    target_kbps = options.pop("target_kbps", None)
+    max_output_ratio = options.pop("max_output_ratio", None)
     threads = options.pop("threads", 1)
     if threads is None:
         threads = 1
@@ -165,6 +210,17 @@ def encode(source, destination, options, cancel_check=None, progress_callback=No
     if requested is not None and metadata["has_audio"]:
         raise ValueError("Audio with max_frames is not supported; trim the source first")
     metadata["version"] = 5
+    duration = metadata["num_frames"] * metadata["fps_den"] / metadata["fps_num"]
+    size_budget = int(Path(source).stat().st_size * max_output_ratio) if max_output_ratio is not None else None
+    rate_budget = int(target_kbps * 1000 * duration / 8) if target_kbps is not None else None
+    controller = None
+    if target_kbps is not None:
+        from .rate_control import RateController
+
+        controller = RateController(target_kbps, fps=metadata["fps_num"] / metadata["fps_den"],
+                                    tune="anime" if options.get("preset") == "anime" else "screen")
+        # Measured feedback must reach the next chunk before it is encoded.
+        threads = 1
     encoded_metadata = json.dumps(metadata, separators=(",", ":")).encode()
     options.pop("container_version", None)
     options["container_version"] = 4 if options.get("motion_comp") else 3
@@ -190,7 +246,16 @@ def encode(source, destination, options, cancel_check=None, progress_callback=No
                         if frame.shape != (metadata["height"], metadata["width"], 3):
                             raise ValueError("Source frame dimensions changed")
                         chunk.append(frame)
-                    encode_video_to_tfc(np.asarray(chunk), str(chunk_path), **options, cancel_check=cancel_check)
+                    chunk_options = dict(options)
+                    if controller is not None:
+                        params = controller.get_chunk_parameters(count)
+                        for key in ("tau", "slope_threshold", "q_step"):
+                            chunk_options[key] = params[key]
+                        if chunk_options.get("rdo"):
+                            chunk_options["lambda_rdo"] = params["lambda_rdo"]
+                    _encode_rgb_chunk(np.asarray(chunk), chunk_path, chunk_options, cancel_check)
+                    if controller is not None:
+                        controller.update(count, chunk_path.stat().st_size + RECORD.size)
                     _write_record(output, b"VIDS", chunk_path, cancel_check)
                     completed += count
                     report_progress(progress_callback, "Encoding frames", completed, metadata["num_frames"])
@@ -202,7 +267,7 @@ def encode(source, destination, options, cancel_check=None, progress_callback=No
                 pending: dict[int, tuple[concurrent.futures.Future, Path, int]] = {}
 
                 def _encode_worker(chunk_arr, out_path, opts, cancel):
-                    encode_video_to_tfc(chunk_arr, str(out_path), **opts, cancel_check=cancel)
+                    _encode_rgb_chunk(chunk_arr, out_path, opts, cancel)
                     return out_path
 
                 with concurrent.futures.ThreadPoolExecutor(max_workers=threads) as executor:
@@ -250,6 +315,14 @@ def encode(source, destination, options, cancel_check=None, progress_callback=No
                 _write_record(output, b"AUDI", audio_path, cancel_check)
             output.write(RECORD.pack(b"DONE", 0, 0))
             check_cancel(cancel_check)
+        actual_bytes = Path(temporary).stat().st_size
+        for label, budget in (("size target", size_budget), ("bitrate target", rate_budget)):
+            if budget is not None and actual_bytes > budget:
+                raise ValueError(
+                    f"TFC cannot meet the {label} with these settings: "
+                    f"encoded {actual_bytes:,} bytes; budget {budget:,} bytes. "
+                    "No output was replaced. Use a higher budget or different quality settings."
+                )
 
 
 def iter_frames(

@@ -1,0 +1,58 @@
+{
+  "date": "2026-10-07",
+  "source": "dist/production-validation-2026-09-25/2s.mp4",
+  "source_sha256": "2f5b448eec3bf22b8201983da7013939d8c6b56331d2b3d0f7505ad29725fe7b",
+  "settings": {
+    "container_version": 5,
+    "other_options": "defaults"
+  },
+  "results": [
+    {
+      "preset": "screen",
+      "q_step": 1,
+      "input_bytes": 70053,
+      "output_bytes": 1455828,
+      "psnr_db": 56.6010213223005,
+      "seconds": 6.022011500004737
+    },
+    {
+      "preset": "screen",
+      "q_step": 4,
+      "input_bytes": 70053,
+      "output_bytes": 957726,
+      "psnr_db": 52.0874758862752,
+      "seconds": 5.9093046659982065
+    },
+    {
+      "preset": "anime",
+      "q_step": 1,
+      "input_bytes": 70053,
+      "output_bytes": 585290,
+      "psnr_db": 26.965032182133044,
+      "seconds": 3.1185174170022947
+    }
+  ],
+  "code_sha256": {
+    "timeflowcodec/__init__.py": "598957af8430da597fe7a26e3991dbb2ecd1c8b5881e223344d6522a2f4f55f7",
+    "timeflowcodec/__main__.py": "3129adff95e0f38b87ab34cddfc27082c7892bcaec267ff5d40f160fdf55b44a",
+    "timeflowcodec/atomic.py": "dcdfdd934877bfed15b15dd6b9364bbef9b4953ed7fbba06d9900461230117ee",
+    "timeflowcodec/bench.py": "c7283b62d38bef82bebea9a252de74c3d38c4ccb87ddc2db05398296005c70a8",
+    "timeflowcodec/bjontegaard.py": "07a72fa4fe80c87af1322ced14c7cbd7f958e2f1f7a01b524c53ec562c1e65f5",
+    "timeflowcodec/chunked.py": "22cad10dc5789d49c4a4d277964227d0968d3cff8d53f658f037d9a7dca52dfd",
+    "timeflowcodec/cli.py": "a85626fd99ca261f363a6d530aca6c32b0515fae90ce584d689edc399d2d70fd",
+    "timeflowcodec/constants.py": "5db91c2965918773d2fc3907fbeabc941885f3e77e80e70115b5224c227de461",
+    "timeflowcodec/decoder.py": "3f93bfe0e1fdfc14ef61195e75325c129eae4d342119a225b694536dc3704863",
+    "timeflowcodec/encoder.py": "aa2f0c7bb291f0bb02f73f86d2bb325017a928c3aa21dc146eee7f1b6b054a74",
+    "timeflowcodec/format.py": "c9caa57ec5785ca8fd48736b88622507f3c32ef2d236de76c99cd93f8ee3ef3b",
+    "timeflowcodec/jobs.py": "1ed65f3d01271061c96ab6fd4339e74480cd748e4375bac7fb2246c5da304e02",
+    "timeflowcodec/media.py": "e2d88a6de426c970e23c51b916b9181714b6bbdce858fe42107f262c683b915f",
+    "timeflowcodec/models.py": "84fc22cd20dc95be79bffdb257cac8cc110bfff64177dba00a3ed0650b8660c2",
+    "timeflowcodec/player.py": "5419e4753c12c73d9acbbb86a14b0fb03451f4e1683de2b1897723a480e21922",
+    "timeflowcodec/player_decode.py": "24b6332d6022384d802ab4a4f0a9c0982b3de51eac74cc7533f2630ffe107d27",
+    "timeflowcodec/profile.py": "503e854d4c1171a8c575155dc0fa3d695be6ddc8796b47388f7a7daba1f913a0",
+    "timeflowcodec/rate_control.py": "28721348891b0f748233f7587da0691f119a7ab868345a391f9a1673644c0f54",
+    "timeflowcodec/spline.py": "3c663495fac0377d4f0492ca9e0005f07f8b81b3ffa61c3465e3008aef399300",
+    "timeflowcodec/utils.py": "9dbe28ce0f6089854b879460b71521dd0459746231a1ebb24f53b1f27ba466f6",
+    "timeflowcodec/version.py": "b06c8139496dbcad898bbd5da5ef56aae00b391ac2105bfc95c3cc659856459c"
+  }
+}

@@ -51,6 +51,18 @@ def _suggest_output_path(input_path: str, suffix: str) -> str:
     return str(path.with_suffix(suffix))
 
 
+def _compression_result_message(source: str, destination: str) -> str:
+    if not Path(source).is_file() or not Path(destination).is_file():
+        return "Encoding complete."
+    original = Path(source).stat().st_size
+    encoded = Path(destination).stat().st_size
+    if original <= 0:
+        return f"Encoded {encoded:,} bytes."
+    change = 100 * (1 - encoded / original)
+    comparison = f"{change:.1f}% smaller" if change >= 0 else f"{-change:.1f}% larger"
+    return f"Encoded {encoded:,} bytes from {original:,} bytes — {comparison}."
+
+
 def _preset_ui_defaults(preset: str) -> dict[str, float | int | bool | str]:
     if preset == "screen":
         return {
@@ -202,7 +214,7 @@ class MainWindow(QMainWindow):
         self.encode_worker: CodecWorker | None = None
         self.decode_worker: CodecWorker | None = None
 
-        self.setWindowTitle("TimeFlowCodec — Desktop preview 2")
+        self.setWindowTitle("TimeFlowCodec — Native compression")
         self.resize(1100, 760)
         self.setMinimumSize(960, 680)
         self._apply_style()
@@ -421,7 +433,7 @@ class MainWindow(QMainWindow):
 
         badges = QHBoxLayout()
         badges.setSpacing(10)
-        badges.addWidget(self._make_badge("Desktop preview 2"))
+        badges.addWidget(self._make_badge("Checked size targets"))
         badges.addWidget(self._make_badge(get_version_string()))
         if self.apple_silicon:
             badges.addWidget(self._make_badge("Apple Silicon detected"))
@@ -445,7 +457,7 @@ class MainWindow(QMainWindow):
             self._make_info_strip(
                 "Compression",
                 "Drop an `.mp4`, `.mov`, or `.avi` file. The app defaults to "
-                "the anime preset and Apple Silicon-safe settings.",
+                "screen quality, a checked size target, and Apple Silicon-safe settings.",
             )
         )
 
@@ -485,7 +497,7 @@ class MainWindow(QMainWindow):
         profile_layout.setSpacing(14)
 
         self.preset_combo = QComboBox()
-        self.preset_combo.addItems(["anime", "screen", "lownoise", "custom"])
+        self.preset_combo.addItems(["screen", "anime", "lownoise", "custom"])
         self.preset_combo.currentTextChanged.connect(self._on_preset_changed)
 
         self.comp_combo = QComboBox()
@@ -509,6 +521,16 @@ class MainWindow(QMainWindow):
         profile_layout.addRow("Preset", self.preset_combo)
         profile_layout.addRow("Colorspace", self.colorspace_combo)
         profile_layout.addRow("Payload compression", self.comp_combo)
+        self.size_target_combo = QComboBox()
+        self.size_target_combo.addItem("No larger than the source", 1.0)
+        self.size_target_combo.addItem("Require at least 60% savings", .4)
+        self.size_target_combo.addItem("Allow larger files", None)
+        profile_layout.addRow("Size target", self.size_target_combo)
+        self.residual_step_spin = QSpinBox()
+        self.residual_step_spin.setRange(1, 255)
+        self.residual_step_spin.setValue(1)
+        self.residual_step_spin.setToolTip("1 keeps integer residuals; higher values reduce size and fidelity.")
+        profile_layout.addRow("Residual quality step", self.residual_step_spin)
         profile_layout.addRow("", self.macbook_profile_checkbox)
         profile_layout.addRow("", self.matrix_mode_checkbox)
 
@@ -532,7 +554,7 @@ class MainWindow(QMainWindow):
         summary_strip.setSpacing(8)
         self.speed_badge = self._make_badge("Fast decode")
         self.memory_badge = self._make_badge("Soft RAM limit")
-        self.preset_badge = self._make_badge("Anime tuned")
+        self.preset_badge = self._make_badge("Screen tuned")
         summary_strip.addWidget(self.speed_badge)
         summary_strip.addWidget(self.memory_badge)
         summary_strip.addWidget(self.preset_badge)
@@ -846,7 +868,8 @@ class MainWindow(QMainWindow):
         if self.apple_silicon and self.macbook_profile_checkbox.isChecked():
             self.platform_status.setText(
                 "Apple Silicon mode active. The encoder uses a soft fallback-buffer "
-                "limit, tile sharing and uint8 internals. Total RAM still depends on the clip."
+                "limit and uint8 frame storage. Coding cells remain full resolution; "
+                "total RAM still depends on the clip."
             )
         elif self.apple_silicon:
             self.platform_status.setText(
@@ -882,12 +905,13 @@ class MainWindow(QMainWindow):
 
         if preset == "anime":
             self.preset_note.setText(
-                "Anime preset now uses the new tile-native v3 path with yuv420, zstd, and lower-memory defaults."
+                "Anime uses full-resolution coding cells and YUV420 chroma. "
+                "The size target is checked before publishing the output."
             )
         elif preset == "screen":
             self.preset_note.setText(
                 "Screen preset preserves fine text and colored edges with full-resolution RGB. "
-                "It can use more memory and produce larger files than anime."
+                "Savings depend on the footage; unattainable size targets are reported."
             )
         elif preset == "lownoise":
             self.preset_note.setText("Low-noise preset uses yuv444 and keeps more chroma detail than anime.")
@@ -917,7 +941,7 @@ class MainWindow(QMainWindow):
         )
         self.compress_summary.setText(f"{summary}\nCurrent tuning: {tune}.")
         self.memory_badge.setText("Soft RAM limit" if self.macbook_profile_checkbox.isChecked() else "Higher RAM")
-        self.speed_badge.setText("Tile sharing on" if self.macbook_profile_checkbox.isChecked() else "Manual runtime")
+        self.speed_badge.setText("Bounded chunks" if self.macbook_profile_checkbox.isChecked() else "Manual runtime")
 
     def _update_decode_summary(self) -> None:
         if self.stream_output_checkbox.isChecked():
@@ -971,6 +995,8 @@ class MainWindow(QMainWindow):
             scene_threshold=self.scene_threshold_spin.value(),
             matrix_mode=self.matrix_mode_checkbox.isChecked(),
             preset=self.preset_combo.currentText(),
+            q_step=self.residual_step_spin.value(),
+            max_output_ratio=self.size_target_combo.currentData(),
         )
         self.encode_worker.finished_success.connect(self._on_compress_done)
         self.encode_worker.failed.connect(self._on_compress_error)
@@ -1026,7 +1052,7 @@ class MainWindow(QMainWindow):
     def _on_compress_done(self, _msg: str) -> None:
         self._last_encoded_path = self.encode_worker.args[1]
         self.play_result_btn.setEnabled(True)
-        self._set_busy_state(True, False, "Compression complete.")
+        self._set_busy_state(True, False, _compression_result_message(*self.encode_worker.args[:2]))
 
     def _on_compress_error(self, err: str) -> None:
         self.compress_progress.setRange(0, 100)

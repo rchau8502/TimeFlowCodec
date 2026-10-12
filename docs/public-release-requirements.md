@@ -37,7 +37,15 @@ They are not a claim of exhaustive hostile-input security review.
 
 ## Standalone app and playback
 
-The latest built local app remains the September 23 desktop preview under
+October 7 update: a current local app containing the compression fixes is in
+`dist/compression-fix-2026-10-07/TimeFlowCodec.app`. Its build/signature and native
+opening were verified, along with the packaged size-target failure message.
+The full source suite passed 211 tests (one skipped). See
+[the measured fix report](evaluation/tfc-size-fix-2026-10-07.md).
+This remains a local development build; general 60% MP4 savings have not been
+achieved. Older preview apps and DMG installers do not contain these fixes.
+
+The earlier September 23 desktop preview is under
 `dist/desktop-preview2-2026-09-23/`. It does **not** contain the subsequent v5,
 audio, safety, or codec cancellation changes. A fresh app build and native GUI
 validation are required before distributing the current source as an installer.

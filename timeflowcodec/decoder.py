@@ -184,6 +184,7 @@ def _decode_tfc_to_video(
             plane_data[plane] = parse_plane_payload_v3(
                 payload,
                 payload_comp_type,
+                compact_const=True,
                 expected_logical_count=int(
                     np.prod(tile_grid_shape(*plane_shape(H, W, color_format, plane), int(header.get("tiling", 0) or 1)))
                 ),
@@ -202,6 +203,7 @@ def _decode_tfc_to_video(
             plane_data[plane] = parse_plane_payload_v4(
                 payload,
                 payload_comp_type,
+                compact_const=True,
                 expected_logical_count=int(
                     np.prod(tile_grid_shape(*plane_shape(H, W, color_format, plane), int(header.get("tiling", 0) or 1)))
                 ),
@@ -392,6 +394,13 @@ def _decode_tfc_to_video(
             check_cancel(cancel_check)
             report_progress(progress_callback, "Decoding segments", seg_idx, len(plane_data[PLANE_R]))
             seg_len = plane_data[PLANE_R][seg_idx]["length"]
+            if seg_len == 1 and tile_size == 1 and all(
+                plane_data[plane][seg_idx].get("const_values") is not None for plane in (PLANE_R, PLANE_G, PLANE_B)
+            ):
+                values = [plane_data[plane][seg_idx]["const_values"].reshape(plane_dims[plane])
+                          for plane in (PLANE_R, PLANE_G, PLANE_B)]
+                # One-frame segments cannot reference another time sample.
+                return planes_to_rgb(values, color_format, (H, W))[None, ...]
             plane_frames: list[np.ndarray] = []
             plane_grid_0 = {}
             prepared = {}
@@ -402,7 +411,9 @@ def _decode_tfc_to_video(
                 tiles_y, tiles_x = tile_grid_shape(ph, pw, tile_size)
                 if modes.size != tiles_y * tiles_x:
                     raise ValueError("v3/v4 logical mode count does not match plane tile grid")
-                intercept = np.zeros(modes.size, dtype=np.float64)
+                const_values = seg.get("const_values")
+                intercept = (np.asarray(const_values, dtype=np.float64) if const_values is not None
+                             else np.zeros(modes.size, dtype=np.float64))
                 slope = np.zeros(modes.size, dtype=np.float64)
                 for index, param in seg["tfc_params"].items():
                     intercept[index] = param["a"]

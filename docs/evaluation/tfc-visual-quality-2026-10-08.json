@@ -1,0 +1,193 @@
+{
+  "source": "dist/production-validation-2026-09-25/2s.mp4",
+  "source_sha256": "2f5b448eec3bf22b8201983da7013939d8c6b56331d2b3d0f7505ad29725fe7b",
+  "width": 320,
+  "height": 240,
+  "frames": 48,
+  "fps": 24,
+  "rows": [
+    {
+      "method": "H264 RGB CRF 12",
+      "file": "h264-rgb-crf12.mp4",
+      "bytes": 253060,
+      "settings": [
+        "/Volumes/Crucial X9/AI/TimeFlowCodec/.venv/lib/python3.13/site-packages/imageio_ffmpeg/binaries/ffmpeg-macos-aarch64-v7.1",
+        "-v",
+        "error",
+        "-y",
+        "-f",
+        "rawvideo",
+        "-pix_fmt",
+        "rgb24",
+        "-s",
+        "320x240",
+        "-r",
+        "24",
+        "-i",
+        "pipe:0",
+        "-an",
+        "-c:v",
+        "libx264rgb",
+        "-preset",
+        "veryslow",
+        "-crf",
+        "12",
+        "showcase/visual-quality-2026-10-08/h264-rgb-crf12.mp4"
+      ],
+      "metrics": {
+        "exact_rgb": false,
+        "max_rgb_error": 23,
+        "rgb_psnr_db": 49.05068050864902,
+        "mean_rgb_ssim": 0.9961657175156581
+      }
+    },
+    {
+      "method": "H264 RGB CRF 18",
+      "file": "h264-rgb-crf18.mp4",
+      "bytes": 162088,
+      "settings": [
+        "/Volumes/Crucial X9/AI/TimeFlowCodec/.venv/lib/python3.13/site-packages/imageio_ffmpeg/binaries/ffmpeg-macos-aarch64-v7.1",
+        "-v",
+        "error",
+        "-y",
+        "-f",
+        "rawvideo",
+        "-pix_fmt",
+        "rgb24",
+        "-s",
+        "320x240",
+        "-r",
+        "24",
+        "-i",
+        "pipe:0",
+        "-an",
+        "-c:v",
+        "libx264rgb",
+        "-preset",
+        "veryslow",
+        "-crf",
+        "18",
+        "showcase/visual-quality-2026-10-08/h264-rgb-crf18.mp4"
+      ],
+      "metrics": {
+        "exact_rgb": false,
+        "max_rgb_error": 41,
+        "rgb_psnr_db": 44.29826626401816,
+        "mean_rgb_ssim": 0.9916834170212289
+      }
+    },
+    {
+      "method": "H264 RGB CRF 23",
+      "file": "h264-rgb-crf23.mp4",
+      "bytes": 111825,
+      "settings": [
+        "/Volumes/Crucial X9/AI/TimeFlowCodec/.venv/lib/python3.13/site-packages/imageio_ffmpeg/binaries/ffmpeg-macos-aarch64-v7.1",
+        "-v",
+        "error",
+        "-y",
+        "-f",
+        "rawvideo",
+        "-pix_fmt",
+        "rgb24",
+        "-s",
+        "320x240",
+        "-r",
+        "24",
+        "-i",
+        "pipe:0",
+        "-an",
+        "-c:v",
+        "libx264rgb",
+        "-preset",
+        "veryslow",
+        "-crf",
+        "23",
+        "showcase/visual-quality-2026-10-08/h264-rgb-crf23.mp4"
+      ],
+      "metrics": {
+        "exact_rgb": false,
+        "max_rgb_error": 80,
+        "rgb_psnr_db": 40.68730712395084,
+        "mean_rgb_ssim": 0.9861767227052044
+      }
+    },
+    {
+      "method": "TFC q4",
+      "file": "tfc-q4.tfc",
+      "bytes": 957726,
+      "settings": {
+        "container_version": 5,
+        "preset": "screen",
+        "q_step": 4,
+        "window": 16
+      },
+      "metrics": {
+        "exact_rgb": false,
+        "max_rgb_error": 10,
+        "rgb_psnr_db": 52.0874758862752,
+        "mean_rgb_ssim": 0.996993078161216
+      }
+    },
+    {
+      "method": "TFC q8",
+      "file": "tfc-q8.tfc",
+      "bytes": 730339,
+      "settings": {
+        "container_version": 5,
+        "preset": "screen",
+        "q_step": 8,
+        "window": 16
+      },
+      "metrics": {
+        "exact_rgb": false,
+        "max_rgb_error": 10,
+        "rgb_psnr_db": 47.947164881478216,
+        "mean_rgb_ssim": 0.9937609275770422
+      }
+    },
+    {
+      "method": "TFC q16",
+      "file": "tfc-q16.tfc",
+      "bytes": 551810,
+      "settings": {
+        "container_version": 5,
+        "preset": "screen",
+        "q_step": 16,
+        "window": 16
+      },
+      "metrics": {
+        "exact_rgb": false,
+        "max_rgb_error": 10,
+        "rgb_psnr_db": 44.32315536434591,
+        "mean_rgb_ssim": 0.9901502101921459
+      }
+    }
+  ],
+  "matched_metric_comparisons": [
+    {
+      "h264": "H264 RGB CRF 12",
+      "h264_bytes": 253060,
+      "tfc": "TFC q4",
+      "tfc_bytes": 957726,
+      "size_saving_percent": -278.4580731842251,
+      "target_60_percent_met": false
+    },
+    {
+      "h264": "H264 RGB CRF 18",
+      "h264_bytes": 162088,
+      "tfc": "TFC q8",
+      "tfc_bytes": 730339,
+      "size_saving_percent": -350.5817827353043,
+      "target_60_percent_met": false
+    },
+    {
+      "h264": "H264 RGB CRF 23",
+      "h264_bytes": 111825,
+      "tfc": "TFC q16",
+      "tfc_bytes": 551810,
+      "size_saving_percent": -393.45852895148676,
+      "target_60_percent_met": false
+    }
+  ],
+  "limits": "PSNR and SSIM are screening metrics, not proof of visual indistinguishability. No rescaling or frame dropping. Source ownership is not established; this source clip is for local diagnostics, not the CC0 showcase."
+}

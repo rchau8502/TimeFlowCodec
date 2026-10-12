@@ -95,12 +95,9 @@ def unpack_modes(buf: bytes, N: int, bits_per_mode: int = BITS_PER_MODE) -> np.n
     expected_len = (N + 3) // 4
     if len(buf) != expected_len:
         raise ValueError("Buffer too small for mode table")
-    modes = np.zeros((N,), dtype=np.uint8)
-    for i in range(N):
-        byte_idx = i // 4
-        shift = (i % 4) * 2
-        modes[i] = (buf[byte_idx] >> shift) & 0x3
-    return modes
+    packed = np.frombuffer(buf, dtype=np.uint8)
+    shifts = np.array([0, 2, 4, 6], dtype=np.uint8)
+    return ((packed[:, None] >> shifts) & 3).reshape(-1)[:N]
 
 
 def _rle_encode(data: bytes) -> bytes:
@@ -622,7 +619,7 @@ def quantize_temporal_predictors(parameters: list[dict], b_scale: float) -> tupl
     return a_q, b_q
 
 
-def build_plane_payload_v3(
+def _build_plane_payload_v3(
     segments: list[dict],
     payload_comp_type: int,
 ) -> bytes:
@@ -645,7 +642,7 @@ def build_plane_payload_v3(
         linear_params = [tfc_params[int(idx)] for idx in linear_scan] + [raw_predictors[int(idx)] for idx in raw_scan]
         b_scale = predictor_slope_scale(linear_params)
         raw_abs = float(np.max(np.abs(raw_residuals.astype(np.float32)))) if raw_residuals.size else 0.0
-        raw_scale = 1.0 if raw_abs == 0.0 else raw_abs / 32767.0
+        raw_scale = float(max(seg.get("q_step", 1), raw_abs / 32767.0))
 
         buf.write(
             struct.pack(
@@ -696,7 +693,49 @@ def build_plane_payload_v3(
     return _compress_payload(buf.getvalue(), payload_comp_type)
 
 
-def parse_plane_payload_v3(comp_payload: bytes, payload_comp_type: int, *, expected_logical_count=None):
+def _compact_scan_payload(segments, payload_comp_type, builder):
+    """Choose the smaller native representation without changing the wire format.
+
+    Regression residuals can destroy repeated spatial colors. For fallback cells,
+    also try storing samples with a zero predictor. Existing v3/v4 decoders read
+    either representation; compare actual compressed bytes rather than estimates.
+    """
+    fitted = builder(segments, payload_comp_type)
+    if payload_comp_type == COMP_NONE:
+        return fitted
+    alternatives = []
+    for segment in segments:
+        ids = np.flatnonzero(np.asarray(segment["modes"]) == MODE_FB_RAW)
+        alternative = dict(segment)
+        if ids.size:
+            predictors = segment["raw_predictors"]
+            linear = [segment["tfc_params"][int(i)] for i in
+                      np.flatnonzero(np.asarray(segment["modes"]) == MODE_TFC_LINEAR)]
+            scale = predictor_slope_scale(linear + [predictors[int(i)] for i in ids])
+            aq, bq = quantize_temporal_predictors([predictors[int(i)] for i in ids], scale)
+            # Reconstruct the exact predictor used to generate these residuals.
+            samples = (aq[:, None].astype(np.float64)
+                       + bq[:, None].astype(np.float64) * scale * np.arange(segment["length"])
+                       + np.asarray(segment["raw_residuals"], dtype=np.float64))
+            if np.any(np.abs(samples) > 32767):
+                return fitted
+            alternative["raw_predictors"] = {int(i): {"a": 0., "b": 0.} for i in ids}
+            alternative["raw_residuals"] = np.rint(samples).astype(np.int16)
+        alternatives.append(alternative)
+    direct = builder(alternatives, payload_comp_type)
+    return direct if len(direct) < len(fitted) else fitted
+
+
+def build_plane_payload_v3(segments: list[dict], payload_comp_type: int) -> bytes:
+    return _compact_scan_payload(segments, payload_comp_type, _build_plane_payload_v3)
+
+
+def build_plane_payload_v4(segments: list[dict], payload_comp_type: int) -> bytes:
+    return _compact_scan_payload(segments, payload_comp_type, _build_plane_payload_v4)
+
+
+def parse_plane_payload_v3(comp_payload: bytes, payload_comp_type: int, *, expected_logical_count=None,
+                           compact_const=False):
     """Parse a version 3 plane payload."""
     payload = _decompress_payload(comp_payload, payload_comp_type)
     bio = io.BytesIO(payload)
@@ -741,8 +780,9 @@ def parse_plane_payload_v3(comp_payload: bytes, payload_comp_type: int, *, expec
             if len(const_raw) != const_count:
                 raise ValueError("Incomplete v3 const stream")
             const_vals = np.frombuffer(const_raw, dtype=np.uint8)
-            for logical_idx, a_q in zip(const_scan.tolist(), const_vals.tolist()):
-                tfc_params[int(logical_idx)] = {"mode": MODE_TFC_CONST, "a": float(a_q)}
+            if not (compact_const and const_count == logical_count and seg_len == 1):
+                for logical_idx, a_q in zip(const_scan.tolist(), const_vals.tolist()):
+                    tfc_params[int(logical_idx)] = {"mode": MODE_TFC_CONST, "a": float(a_q)}
 
         if linear_count:
             a_raw = bio.read(linear_count)
@@ -788,13 +828,14 @@ def parse_plane_payload_v3(comp_payload: bytes, payload_comp_type: int, *, expec
                 "tfc_params": tfc_params,
                 "raw_predictors": raw_predictors,
                 "raw_residuals": raw_residuals,
+                "const_values": const_vals if compact_const and const_count == logical_count and seg_len == 1 else None,
             }
         )
     _finish_payload(bio)
     return segments
 
 
-def build_plane_payload_v4(
+def _build_plane_payload_v4(
     segments: list[dict],
     payload_comp_type: int,
 ) -> bytes:
@@ -817,7 +858,7 @@ def build_plane_payload_v4(
         linear_params = [tfc_params[int(idx)] for idx in linear_scan] + [raw_predictors[int(idx)] for idx in raw_scan]
         b_scale = predictor_slope_scale(linear_params)
         raw_abs = float(np.max(np.abs(raw_residuals.astype(np.float32)))) if raw_residuals.size else 0.0
-        raw_scale = 1.0 if raw_abs == 0.0 else raw_abs / 32767.0
+        raw_scale = float(max(seg.get("q_step", 1), raw_abs / 32767.0))
 
         mvs = seg.get("mvs", None)
         has_mvs = 1 if mvs is not None and mvs.size > 0 else 0
@@ -876,7 +917,8 @@ def build_plane_payload_v4(
     return _compress_payload(buf.getvalue(), payload_comp_type)
 
 
-def parse_plane_payload_v4(comp_payload: bytes, payload_comp_type: int, *, expected_logical_count=None):
+def parse_plane_payload_v4(comp_payload: bytes, payload_comp_type: int, *, expected_logical_count=None,
+                           compact_const=False):
     """Parse a version 4 plane payload."""
     payload = _decompress_payload(comp_payload, payload_comp_type)
     bio = io.BytesIO(payload)
@@ -941,8 +983,9 @@ def parse_plane_payload_v4(comp_payload: bytes, payload_comp_type: int, *, expec
             if len(const_raw) != const_count:
                 raise ValueError("Incomplete v4 const stream")
             const_vals = np.frombuffer(const_raw, dtype=np.uint8)
-            for logical_idx, a_q in zip(const_scan.tolist(), const_vals.tolist()):
-                tfc_params[int(logical_idx)] = {"mode": MODE_TFC_CONST, "a": float(a_q)}
+            if not (compact_const and const_count == logical_count and seg_len == 1):
+                for logical_idx, a_q in zip(const_scan.tolist(), const_vals.tolist()):
+                    tfc_params[int(logical_idx)] = {"mode": MODE_TFC_CONST, "a": float(a_q)}
 
         if linear_count:
             a_raw = bio.read(linear_count)
@@ -989,6 +1032,7 @@ def parse_plane_payload_v4(comp_payload: bytes, payload_comp_type: int, *, expec
                 "raw_predictors": raw_predictors,
                 "raw_residuals": raw_residuals,
                 "mvs": mvs,
+                "const_values": const_vals if compact_const and const_count == logical_count and seg_len == 1 else None,
             }
         )
     _finish_payload(bio)

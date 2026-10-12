@@ -36,6 +36,15 @@ Goal: execute the approved TimeFlowCodec improvement roadmap and prepare publica
 - [x] 27. Slurm HPC Outbound Worker (`testbed/hpc/hpc_worker.py`, `testbed/hpc/hpc_job.slurm`): Headless cluster worker polling Supabase, executing TimeFlowCodec, handling SIGTERM/exceptions cleanly.
 - [x] 28. Integration testing & verification (`tests/test_testbed.py`, 192 passed, 1 skipped, 0 failed, 100% clean linter).
 
+## Phase: Honest Compression & Native Spatial Compaction (Oct 7–8)
+- [x] 29. Wasteful residual integer scaling corrected: preserve integer residuals at unit scale in v3/v4; optional residual quantization step (`--q-step`).
+- [x] 30. Native spatial compaction (`_compact_scan_payload` and `_encode_rgb_chunk`): frame-order CONST segment candidate selection for moving screen content without changing wire syntax or breaking C decoders (~48.1% size reduction on scrolling card tests).
+- [x] 31. Strict size and bitrate target budgets (`--max-output-ratio`, `--bitrate`): fail-safe atomic protection if compressed file exceeds budget; no unverified automatic downsampling.
+- [x] 32. Vectorized format parsing & fast-path decode: `unpack_modes` NumPy vectorization and zero-copy 1-frame CONST segment reconstruction in Python and C decoders.
+- [x] 33. Desktop GUI updates: checked size target dropdown, residual quality step spinbox, and measured size reduction reporting.
+- [x] 34. Empirical evaluation & honest benchmarks: `scripts/measure_visual_quality.py`, `scripts/create_showcase.py`, withdrawal of unsupported synthetic BD-rate tables, documentation of actual measured results (`docs/evaluation/tfc-size-fix-2026-10-07.md`, `docs/evaluation/tfc-spatial-improvement-2026-10-08.md`).
+- [x] 35. Full regression test suite: 225 passed, 1 skipped, 0 failed; ruff 100% clean.
+
 ## Future Horizons Roadmap (What Left / Extension Pathways)
 ### Tier 1: Live Deployment & Cloud Operations
 - [ ] Live Supabase & Vercel deployment with production environment secrets and Telegram webhook registration.

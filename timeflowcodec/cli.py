@@ -113,6 +113,9 @@ def compress_main(argv: list[str] | None = None) -> None:
     )
     parser.add_argument("--crf", type=float, default=None, help="Constant Rate Factor (0-63)")
     parser.add_argument("--bitrate", type=str, default=None, help="Target bitrate (e.g. '2M', '800k')")
+    parser.add_argument("--q-step", type=int, default=None, help="Residual quantization step (1-255)")
+    parser.add_argument("--max-output-ratio", type=float, default=None,
+                        help="Maximum output/input size; .4 requires 60%% savings (v5)")
     parser.add_argument(
         "--tune",
         type=str,
@@ -153,20 +156,24 @@ def _resolve_encode_options(args: argparse.Namespace) -> dict:
             motion_comp = True
 
     crf = getattr(args, "crf", None)
+    target_kbps = None
+    q_step = getattr(args, "q_step", None)
+    if crf is not None and getattr(args, "bitrate", None) is not None:
+        raise ValueError("Choose either --crf or --bitrate")
     if crf is not None:
         from .rate_control import crf_to_parameters
 
         crf_params = crf_to_parameters(crf, tune=tune or "screen")
         tau = crf_params["tau"]
         slope_threshold = crf_params["slope_threshold"]
+        if q_step is None:
+            q_step = crf_params["q_step"]
         if rdo and lambda_rdo is None:
             lambda_rdo = crf_params["lambda_rdo"]
     elif getattr(args, "bitrate", None) is not None:
         from .rate_control import parse_bitrate_string
 
         target_kbps = parse_bitrate_string(args.bitrate)
-        est_tau = max(1e-5, min(0.05, 5.0 / max(target_kbps, 100.0)))
-        tau = est_tau
 
     return {
         "tau": tau,
@@ -190,6 +197,9 @@ def _resolve_encode_options(args: argparse.Namespace) -> dict:
         "rdo": rdo,
         "lambda_rdo": lambda_rdo,
         "threads": threads,
+        "q_step": 1 if q_step is None else q_step,
+        "target_kbps": target_kbps,
+        "max_output_ratio": getattr(args, "max_output_ratio", None),
     }
 
 
@@ -308,6 +318,9 @@ def main(argv: list[str] | None = None) -> None:
     )
     p_enc.add_argument("--crf", type=float, default=None, help="Constant Rate Factor (0-63)")
     p_enc.add_argument("--bitrate", type=str, default=None, help="Target bitrate (e.g. '2M', '800k')")
+    p_enc.add_argument("--q-step", type=int, default=None, help="Residual quantization step (1-255)")
+    p_enc.add_argument("--max-output-ratio", type=float, default=None,
+                       help="Maximum output/input size; .4 requires 60%% savings (v5)")
     p_enc.add_argument(
         "--tune",
         type=str,

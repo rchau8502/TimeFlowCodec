@@ -5,6 +5,7 @@ block_cipher = None
 import platform
 
 from PyInstaller.utils.hooks import collect_all
+from timeflowcodec.version import __version__
 
 datas = [("demo_assets/demo_input.mp4", "demo_assets"), ("demo_assets/demo_input.tfc", "demo_assets")]
 binaries = []
@@ -23,8 +24,8 @@ if platform.system() == "Darwin" and platform.machine().lower() in {"arm64", "aa
 info_plist = {
     "CFBundleDisplayName": "TimeFlowCodec",
     "CFBundleName": "TimeFlowCodec",
-    "CFBundleShortVersionString": "0.2.0",
-    "CFBundleVersion": "0.2.1",
+    "CFBundleShortVersionString": __version__,
+    "CFBundleVersion": __version__,
     "LSMinimumSystemVersion": "13.0",
     "NSHighResolutionCapable": True,
     "CFBundleDocumentTypes": [{

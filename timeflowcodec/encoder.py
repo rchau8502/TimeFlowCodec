@@ -133,7 +133,7 @@ def _apply_preset_defaults(
             0.035 if tau == DEFAULT_TAU else tau,
             0.0012 if slope_threshold == DEFAULT_SLOPE_THRESHOLD else slope_threshold,
             COMP_ZSTD if payload_comp_type == COMP_ZLIB else payload_comp_type,
-            8 if tiling is None else tiling,
+            1 if tiling is None else tiling,
             2500 if max_ram_mb is None else max_ram_mb,
             "auto" if scene_cut == "off" else scene_cut,
             0.22 if scene_threshold == 0.35 else scene_threshold,
@@ -149,7 +149,7 @@ def _apply_preset_defaults(
             0.05 if tau == DEFAULT_TAU else tau,
             0.0012 if slope_threshold == DEFAULT_SLOPE_THRESHOLD else slope_threshold,
             COMP_ZSTD if payload_comp_type == COMP_ZLIB else payload_comp_type,
-            8 if tiling is None else tiling,
+            1 if tiling is None else tiling,
             2500 if max_ram_mb is None else max_ram_mb,
             "auto" if scene_cut == "off" else scene_cut,
             0.24 if scene_threshold == 0.35 else scene_threshold,
@@ -165,7 +165,7 @@ def _apply_preset_defaults(
             0.05 if tau == DEFAULT_TAU else tau,
             0.0012 if slope_threshold == DEFAULT_SLOPE_THRESHOLD else slope_threshold,
             COMP_ZSTD if payload_comp_type == COMP_ZLIB else payload_comp_type,
-            8 if tiling is None else tiling,
+            1 if tiling is None else tiling,
             2500 if max_ram_mb is None else max_ram_mb,
             "auto" if scene_cut == "off" else scene_cut,
             0.22 if scene_threshold == 0.35 else scene_threshold,
@@ -365,12 +365,26 @@ def encode_video_to_tfc(
     rdo: bool = False,
     lambda_rdo: float | None = None,
     threads: int = 1,
+    q_step: int = 1,
+    target_kbps: float | None = None,
+    max_output_ratio: float | None = None,
     cancel_check=None,
     progress_callback=None,
 ) -> None:
     """
     Streaming encoder with bounded memory and optional scene-cut segmentation.
     """
+
+    if type(q_step) is not int or not 1 <= q_step <= 255:
+        raise ValueError("q_step must be an integer from 1 to 255")
+    if target_kbps is not None and (not np.isfinite(target_kbps) or target_kbps <= 0):
+        raise ValueError("target_kbps must be positive and finite")
+    if max_output_ratio is not None and (not np.isfinite(max_output_ratio) or max_output_ratio <= 0):
+        raise ValueError("max_output_ratio must be positive and finite")
+    if container_version != 5 and (target_kbps is not None or max_output_ratio is not None):
+        raise ValueError("Size and bitrate targets require container version 5")
+    if container_version < 3 and q_step != 1:
+        raise ValueError("Residual quantization requires container version 3 or later")
 
     if container_version == 5:
         from .chunked import encode
@@ -1059,6 +1073,7 @@ def encode_video_to_tfc(
                             "tfc_params": plane_segments[plane][idx]["tfc_params"],
                             "raw_predictors": plane_segments[plane][idx]["raw_predictors"],
                             "raw_residuals": plane_segments[plane][idx]["raw_residuals"],
+                            "q_step": q_step,
                             "mvs": plane_segments[plane][idx].get("mvs", None),
                         }
                         for idx in range(len(seg_lengths))
@@ -1072,6 +1087,7 @@ def encode_video_to_tfc(
                             "tfc_params": plane_segments[plane][idx]["tfc_params"],
                             "raw_predictors": plane_segments[plane][idx]["raw_predictors"],
                             "raw_residuals": plane_segments[plane][idx]["raw_residuals"],
+                            "q_step": q_step,
                         }
                         for idx in range(len(seg_lengths))
                     ]

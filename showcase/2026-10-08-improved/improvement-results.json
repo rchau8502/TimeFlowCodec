@@ -1,0 +1,48 @@
+{
+  "date": "2026-10-08",
+  "change": "Adaptive exact-RGB frame-order CONST chunks in existing v3/v4 syntax",
+  "results": [
+    {
+      "scene": "scrolling_cards",
+      "previous": {
+        "bytes": 240365,
+        "exact_rgb": true
+      },
+      "current": {
+        "method": "tfc",
+        "label": "TFC native RGB",
+        "file": "scrolling_cards/native.tfc",
+        "bytes": 124643,
+        "encode_seconds": 169.85810283300816,
+        "options": {
+          "preset": "screen",
+          "container_version": 5,
+          "tau": 0,
+          "q_step": 1,
+          "window": 16
+        },
+        "exact_rgb": true,
+        "max_rgb_error": 0,
+        "rgb_psnr_db": null
+      },
+      "reduction_from_previous_tfc_percent": 48.144280573294786
+    },
+    {
+      "scene": "original_2s_mp4_check",
+      "source": "dist/production-validation-2026-09-25/2s.mp4",
+      "source_bytes": 70053,
+      "previous_tfc_bytes": 1455828,
+      "current_tfc_bytes": 1181878,
+      "metrics": {
+        "exact_rgb": true,
+        "max_rgb_error": 0,
+        "rgb_psnr_db": null
+      },
+      "source_sha256": "2f5b448eec3bf22b8201983da7013939d8c6b56331d2b3d0f7505ad29725fe7b",
+      "tfc_sha256": "6931236bc556e08d183487f49f4f93b9e6f55f032ef44be7108b4c038d83d98f",
+      "reduction_from_previous_tfc_percent": 18.817470195654984
+    }
+  ],
+  "unmet": "General 60 percent saving against standard compressed video remains unachieved.",
+  "diagnostic_media": "The existing MP4 check is local diagnostics only. Its encoded file is outside the CC0 package in dist/spatial-evaluation-2026-10-08/."
+}

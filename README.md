@@ -1,6 +1,6 @@
 # TimeFlowCodec — Per-Pixel Temporal Video Codec
 
-**TimeFlowCodec (TFC)** is a novel, high-throughput video codec designed specifically for **screen content, UI capture, presentations, and animation**. Instead of traditional 2D spatial block transforms (DCT/DST) that produce severe Gibbs ringing and mosquito halos around high-contrast text stems, TimeFlowCodec performs **1D closed-form temporal regression** ($\hat{s}(t) = a + bt$) per coordinate with native 4:4:4 full-color fidelity, $\mathcal{O}(1)$ working line memory, and ultra-high decoding throughput (>840 FPS in ANSI C).
+**TimeFlowCodec (TFC)** is an experimental native codec for **screen content, UI capture, presentations, and animation**. It fits constant or linear temporal functions ($\hat{s}(t) = a + bt$) per coordinate, with fallback samples for pixels that do not fit. It supports full-resolution RGB, bounded video chunks, and a native C decoder. Compression performance depends on content and reconstruction quality.
 
 ## Key Architectural Advantages
 
@@ -8,12 +8,12 @@
   Eliminates the oscillatory ripples and mosquito noise intrinsic to block DCT/DST transforms on sharp step edges.
 - **Native 4:4:4 Full-Chroma Fidelity:**
   Full-resolution color coding without chroma bleed or blurring on thin colored text (e.g. syntax highlighting in IDEs).
-- **Extreme Decoder Throughput (>840 FPS):**
+- **Native Decoder:**
   Linear evaluation ($a + bt$) maps to unit-stride memory access with zero inter-block dependencies or inverse transform matrix multiplications.
-- **$\mathcal{O}(1)$ Working Memory & No Intra Block Copy SRAM:**
-  Eliminates the large 2D on-chip SRAM search buffers required by HEVC-SCC Intra Block Copy (IBC).
+- **Bounded Chunk Memory:**
+  v5 limits decoded RGB data per chunk. Working memory also includes per-pixel model statistics and compressed-payload buffers.
 - **Standard Modern Codec Controls:**
-  AV1/x264-style **CRF (0–63)**, leaky-bucket **CBR/VBR**, Lagrangian **Rate-Distortion Optimization (RDO)**, and SMP multi-threading (`--threads N`).
+  TFC-specific **CRF (0–63)**, measured VBR feedback, Lagrangian **Rate-Distortion Optimization (RDO)**, and SMP multi-threading (`--threads N`).
 
 ## Publication & Academic Research
 
@@ -23,16 +23,39 @@
 - **Presentation Slide Deck:** [`presentation/presentation.pdf`](presentation/presentation.pdf) (20-slide LaTeX Beamer presentation).
 - **Defense Script & Q&A:** [`presentation/SPEAKER_NOTES.md`](presentation/SPEAKER_NOTES.md) (Slide-by-slide 19-minute script + committee Q&A defense guide).
 
-## Measured Rate-Distortion & Complexity Benchmark
+## Compression status and measured evidence
 
-Evaluated on standardized JVET-SCC benchmarks following ITU-T VCEG-M33:
+The [improved original CC0 showcase](showcase/2026-10-08-improved/index.html) includes a presentation
+video, lossless masters, native TFC files, measured H.264/AV1/HEVC comparisons,
+and reproduction source. Its deliberately linear animation demonstrates an
+exact-RGB advantage; the scrolling control demonstrates a case where H.264 wins.
+See [presentation wording and limits](showcase/2026-10-08-improved/PRESENTATION-NOTES.md).
 
-| Benchmark Sequence | TFC vs H.264 BD-Rate | TFC vs H.264 BD-PSNR | Characteristic |
-| :--- | :---: | :---: | :--- |
-| **Presentation Slides** (`scc_slideshow`) | **-34.5%** | **+2.85 dB** | Zero spatial residual overhead |
-| **Desktop UI** (`scc_animation_ui`) | **-31.2%** | **+2.41 dB** | Crisp 1-pixel text edges, no ringing |
-| **Synthetic Animation** (`scc_console_code`) | **-28.4%** | **+2.12 dB** | High temporal coherence |
-| **Screen Content Average** | **-26.8%** | **+2.18 dB** | Substantial bitstream savings |
+v5 RGB encodes with residual step 1 now compare temporal chunks against exact
+frame-order CONST segments and select the smaller complete native chunk.
+This exposes repeated spatial patterns to the compressor while preserving
+compatibility with existing v3/v4 chunk decoders. Other colorspaces, quantization
+steps, and averaged coding cells retain their existing policy.
+
+TFC is an experimental native temporal codec. **A general 60% reduction against
+MP4 has not been demonstrated.** MP4 is a container; useful comparisons require
+a named video codec and matched reconstruction quality.
+
+The earlier BD-rate superiority table has been withdrawn: its advertised values
+are not supported by the saved benchmark results. The legacy thesis, paper,
+presentation, and research figures contain unverified performance claims and
+illustrative data; they are drafts, not product validation.
+
+See [the size investigation](docs/evaluation/tfc-size-investigation-2026-10-07.md)
+and [the actual saved synthetic SCC measurements](benchmarks/scc_results/scc_benchmark_report.md).
+Those results vary by clip and quality. Locally generated clips are not a
+standard JVET test corpus. No general codec-superiority claim follows from them.
+
+The desktop encoder now checks its size target before publishing a result.
+The default requires output no larger than the source; the optional 60% savings
+target requires output at most 40% of the input bytes. Unattainable targets fail
+without replacing an existing destination. Choose **Allow larger files** for
+archival or experimental use. Successful encodes report measured sizes.
 
 ## Core Idea
 For RGB video `V(t, y, x, c)` (channels `c ∈ {R,G,B}`):
@@ -62,10 +85,10 @@ For RGB video `V(t, y, x, c)` (channels `c ∈ {R,G,B}`):
 - Mode maps are bitpacked and RLE-coded. CONST/LINEAR payloads are quantized; no float32 arrays are written on disk in modern containers.
 
 ### Spatial detail
-With tile size 1, modeling is per pixel per channel. With larger tiles, modern
+With tile size 1, modeling is per pixel per channel. Explicitly choosing larger tiles is lossy. With larger tiles, modern
 v3/v4 formats store a value per tile, including fallback samples, and expand it
-across the tile on decode. This is lossy spatial averaging. The `screen` preset
-avoids that averaging and chroma subsampling, but temporal modeling and parameter
+across the tile on decode. This is lossy spatial averaging. Presets now default to one pixel per coding cell. The `screen` preset
+avoids chroma subsampling, but temporal modeling and parameter
 quantization still make it a lossy preset. Explicit tiling/colorspace overrides
 can trade away its detail preservation.
 
@@ -134,7 +157,8 @@ Use the low-memory, laptop-friendly profile:
 ```bash
 tfc encode input.mp4 out.tfc --preset anime --macbook-profile
 ```
-This applies safer defaults (`tiling=16`, `max_ram_mb=1536`, `scene_cut=auto`, `uint8` internals) and avoids heavy settings that cause lag on Apple Silicon laptops.
+This applies a soft memory cap, automatic scene cuts, and uint8 frame storage.
+Preset coding cells remain full resolution; explicit `--tiling` is a lossy choice.
 The `anime` preset also defaults to the compact v3 container and `yuv420`.
 
 Decode with progressive write (default in CLI):
@@ -146,13 +170,21 @@ Use `--no-stream-output` only for debugging/small clips.
 ## CLI Usage & Rate Control
 Install (editable or wheel), then use standard modern codec commands:
 - **CRF Quality Encoding:** `tfc encode input.mp4 out.tfc --crf 23 --tune screen --threads 4`
-- **Target Bitrate:** `tfc encode input.mp4 out.tfc --bitrate 1500k --tune screen`
+- **Checked Target Bitrate:** `tfc encode input.mp4 out.tfc --bitrate 1500k --tune screen`
+- **Checked 60% Savings Target:** `tfc encode input.mp4 out.tfc --preset screen --max-output-ratio 0.4`
+- **Residual Quantization:** `tfc encode input.mp4 out.tfc --preset screen --q-step 4`
+
+Bitrate feedback runs sequentially across v5 chunks, including residual quantization.
+The final total size, including audio/container overhead, must meet the target
+or the destination is preserved and an error is returned. CRF is TFC-specific:
+equal CRF numbers across codecs are not equal quality. A larger residual step
+trades fidelity for size; it does not lower spatial resolution.
 - **Rate-Distortion Optimization (RDO):** `tfc encode input.mp4 out.tfc --crf 18 --rdo`
 - **Parallel Chunked Decode:** `tfc decode out.tfc recon.mp4 --threads 4`
 - **UNIX Streaming Pipeline:** `tfc decode out.tfc - | ffplay -f rawvideo -pixel_format rgb24 -video_size 1920x1080 -`
 
 Supported flags:
-- `--crf <0-63>`: AV1/x264-compliant Constant Rate Factor (default 23).
+- `--crf <0-63>`: TFC-specific quality mapping; omitted by default (residual step 1).
 - `--bitrate <rate>`: Target bitrate (e.g. `1500k`, `2M`) using virtual leaky-bucket rate controller.
 - `--tune {screen,anime,natural}`: Content-aware tuning (screen = zero halo RGB; anime = yuv420; natural = block motion comp).
 - `--rdo`: Evaluates Lagrangian rate-distortion cost $J = D + \lambda R$ per tile.
@@ -161,13 +193,13 @@ Supported flags:
 
 ## Native ANSI C Reference Decoder (`libtfc`)
 
-TimeFlowCodec includes a standalone, zero-dependency ANSI C99 reference decoder core:
+TimeFlowCodec includes a standalone, ANSI C99 reference decoder core with zlib/zstd support:
 ```bash
 # Build libtfc.a and standalone CLI player tfc_dec
 make -C libtfc
 ```
 
-### Decoding & Benchmarking (>840 FPS)
+### Decoding & Benchmarking
 ```bash
 # Decode .tfc file directly to raw RGB24 or PPM image
 libtfc/build/tfc_dec out.tfc frame0.ppm
@@ -175,7 +207,8 @@ libtfc/build/tfc_dec out.tfc frame0.ppm
 # Measure wall-clock decode throughput and FPS
 libtfc/build/tfc_dec out.tfc --bench
 ```
-On 720p60 video, `libtfc` decodes at **>840 FPS (>2,220 MB/s raw RGB24)** with unit-stride streaming memory access and zero line-buffer memory footprint.
+Measure throughput on the actual clip and hardware. The earlier >840 FPS headline
+is withdrawn pending reproducible validation; it is not a general playback guarantee.
 
 ## GUI
 ```bash
