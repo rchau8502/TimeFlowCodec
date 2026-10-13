@@ -12,19 +12,15 @@
 \usepackage[hidelinks]{hyperref}
 
 \renewcommand{\ttdefault}{cmtt}
-
 \graphicspath{{../figures/}{figures/}}
-
-\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
-    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
 
 \begin{document}
 
-\title{TimeFlowCodec: An Orthogonal Video Coding Paradigm for Screen and Synthetic Content via Per-Pixel Temporal Regression}
+\title{TimeFlowCodec: An Orthogonal Video Coding Architecture for Screen and Synthetic Content via Per-Pixel Temporal Regression}
 
 \author{\IEEEauthorblockN{Rich Chau}
 \IEEEauthorblockA{\textit{Department of Mathematics} \\
-\textit{University of California, Irvine}\\
+\textit{University of California, Irvine} [VERIFY]\\
 Irvine, CA, USA \\
 richc3@uci.edu}
 }
@@ -32,26 +28,26 @@ richc3@uci.edu}
 \maketitle
 
 \begin{abstract}
-For over three decades, standard video compression architectures (H.264/AVC, H.265/HEVC, AV1, and VVC) have relied on the canonical hybrid model: spatial block partitioning, 2D Discrete Cosine/Sine Transforms (DCT/DST), and 4:2:0 chroma subsampling. While near-optimal for band-limited natural camera footage, these foundational assumptions break down on synthetic screen content (e.g., programming terminals, remote desktops, vector slides, and cloud gaming). High-contrast step edges generate infinite spatial Fourier harmonics, causing 2D DCT coefficient truncation to induce severe Gibbs ringing artifacts around text, while 4:2:0 chroma decimation obliterates single-pixel syntax-highlighted stems. This paper presents \textit{TimeFlowCodec} (TFC), a video compression architecture that eliminates spatial block transforms in favor of per-pixel 1D temporal function regression. By modeling the temporal luminance trajectory of individual pixels as continuous piecewise linear segments fitted via closed-form Ordinary Least Squares (OLS) and integer motion compensation, TFC preserves exact spatial step discontinuities with zero ringing and native 4:4:4 full-color fidelity. Evaluated across standard JVET Screen Content Coding (SCC) benchmark sequences conforming to ITU-T VCEG-M33 Common Test Conditions, TFC achieves an average Bjontegaard Delta rate (BD-Rate) reduction of $-26.8\%$ over H.264 (libx264) and $-12.4\%$ over HEVC (libx265) on high-contrast UI and slide content, while delivering up to $6.8\times$ faster decode throughput (>240 FPS on commodity x86 CPUs) due to sequential memory access and the absence of 2D spatial filtering barriers.
+Modern video coding standards (H.264/AVC, H.265/HEVC, AV1, and H.266/VVC) rely on the canonical hybrid model: spatial block partitioning, 2D Discrete Cosine/Sine Transforms (DCT/DST), and 4:2:0 chroma subsampling. While near-optimal for band-limited natural camera footage, these foundational assumptions break down on synthetic screen content, including software user interfaces, terminal consoles, vector presentations, and digital animation. Sharp graphical boundaries and single-pixel text stems represent mathematical step discontinuities; transforming these structures with truncated 2D Fourier-basis transforms induces severe Gibbs ringing (mosquito noise), while 4:2:0 chroma decimation obliterates syntax highlighting and colored typography. We present \textit{TimeFlowCodec} (TFC), a video compression architecture that eliminates spatial block transforms in favor of direct 1D per-pixel temporal regression. By modeling the intensity evolution of each pixel over discrete temporal windows using closed-form Ordinary Least Squares (OLS) regression, TFC preserves native 4:4:4 spatial edge fidelity with zero spatial ringing. The resulting bitstream eliminates inter-block spatial dependencies, enabling $O(1)$ working memory state per pixel and highly vectorizable parallel decoding. We outline the theoretical formulation, container specification, and experimental evaluation methodology against standard hybrid codecs.
 \end{abstract}
 
 \begin{IEEEkeywords}
-Video compression, screen content coding, temporal regression, piecewise linear fitting, Gibbs phenomenon, Bjontegaard delta.
+Video compression, screen content coding, temporal regression, ordinary least squares, Gibbs phenomenon, rate-distortion.
 \end{IEEEkeywords}
 
 \section{Introduction}
-Digital video traffic has undergone a structural paradigm shift. Where legacy distribution channels were once dominated by natural camera footage (movies, television, and sports), modern networks are saturated with synthetic screen content: Virtual Desktop Infrastructure (VDI), Remote Desktop Protocol (RDP) sessions, cloud application streaming, collaborative whiteboards, and high-definition programming screencasts \cite{xu2015overview}.
+Digital video distribution has structurally expanded beyond natural camera recordings. Today, a substantial portion of global network traffic consists of synthetic screen content: Virtual Desktop Infrastructure (VDI), remote desktop streaming (RDP/VNC), cloud workspaces, real-time code collaboration, and vector slide decks \cite{xu2015overview}.
 
-Standard video coding standards---spanning H.261 \cite{wiegand2003overview}, H.264/AVC, H.265/HEVC \cite{sullivan2012overview}, AV1 \cite{chen2020overview}, and H.266/VVC \cite{bross2021overview}---rely on a shared conceptual foundation established in the late 1980s:
+Conventional video coding standards---spanning H.264/AVC \cite{wiegand2003overview}, H.265/HEVC \cite{sullivan2012overview}, AV1 \cite{chen2020overview}, and H.266/VVC \cite{bross2021overview}---rely on a shared conceptual foundation:
 \begin{enumerate}
     \item \textbf{Spatial Block Decomposition:} Dividing frames into square blocks (from $4\times 4$ up to $128\times 128$).
     \item \textbf{2D Spatial Transforms:} Transforming spatial prediction residuals into the frequency domain via 2D Discrete Cosine or Sine Transforms (DCT/DST).
     \item \textbf{Chroma Decimation:} Subsampling color channels to 4:2:0 based on human visual system (HVS) spatial contrast sensitivity.
 \end{enumerate}
 
-While exceptionally effective for natural camera scenes, these assumptions fail catastrophically on synthetic screen content \cite{lin2015overview}. Text glyphs, window borders, and vector icons exhibit non-bandlimited mathematical step discontinuities. When transformed into the spatial frequency domain, step discontinuities yield Fourier series that decay only as $O(1/k)$. High-frequency coefficient quantization truncates this series, inducing the classical \textit{Gibbs phenomenon}---visible as severe mosquito ringing and blur around characters. Furthermore, 4:2:0 subsampling decimates color resolution by $75\%$, smearing single-pixel colored syntax highlighting across adjacent dark pixels.
+While exceptionally effective for natural camera scenes, these assumptions fail on synthetic screen content \cite{lin2015overview}. Text glyphs, window borders, and vector icons exhibit non-bandlimited mathematical step discontinuities. When transformed into the spatial frequency domain, step discontinuities yield Fourier series that decay only as $O(1/k)$. High-frequency coefficient quantization truncates this series, inducing the classical \textit{Gibbs phenomenon}---visible as severe mosquito ringing and blur around characters. Furthermore, 4:2:0 subsampling decimates color resolution by $75\%$, smearing single-pixel colored syntax highlighting across adjacent dark pixels.
 
-Although standards bodies introduced Screen Content Coding extensions (HEVC-SCC \cite{xu2015overview} and AV1 IntraBC \cite{chen2020overview}) using Intra Block Copy (IBC) and Palette Mode, these tools remain grafted onto the existing block transform pipeline. IBC requires massive on-chip SRAM search windows ($>128$~KB) for unconstrained 2D block displacement vectors, introducing severe routing congestion and memory bandwidth bottlenecks in hardware decoders, which has historically hindered mainstream mobile silicon adoption. Earlier explorations of temporal pixel trajectories (e.g., Esche et al.~\cite{esche2010novel,krutz2013adaptive}) demonstrated temporal correlation along motion paths, but were constrained to natural camera footage where 2D spatial DCT frequency compaction dominates due to high inter-pixel spatial correlation. Consequently, prior works relegated trajectory modeling to in-loop filtering rather than a standalone primary coding engine.
+Moreover, translational motion estimation (ME) in traditional codecs assumes that scene changes are governed by rigid physical motion fields. On computer screens, pixels transition primarily due to discrete state changes: a cursor blinks, text scrolls line-by-line, a pop-up menu appears, or a progress bar fills. Searching for 2D motion vectors across large pixel blocks is computationally wasteful when the underlying phenomenon is a stationary or linear per-pixel state transition.
 
 \begin{figure}[t]
     \centering
@@ -62,53 +58,75 @@ Although standards bodies introduced Screen Content Coding extensions (HEVC-SCC 
 
 In this paper, we propose \textit{TimeFlowCodec} (TFC), a video coding architecture built upon an orthogonal paradigm:
 \begin{itemize}
-    \item \textbf{Elimination of Spatial Block Transforms:} TFC discards 2D spatial DCT/DST transforms entirely. Every pixel is reconstructed independently along the temporal dimension, eliminating block boundary discontinuities and spatial Gibbs ringing.
-    \item \textbf{Native 4:4:4 RGB Fidelity:} Color channels are treated with full spatial resolution, preserving 1-pixel font stems and sharp color contrast.
+    \item \textbf{Elimination of Spatial Block Transforms:} TFC discards 2D spatial DCT/DST transforms entirely. Every pixel coordinate $(x, y)$ is reconstructed independently along the temporal dimension, eliminating block boundary discontinuities and spatial Gibbs ringing.
+    \item \textbf{Native 4:4:4 RGB Fidelity:} Color channels are preserved at full spatial resolution, preventing text stem decimation and chroma bleed.
     \item \textbf{Closed-Form $O(T)$ Linear Regression:} Temporal trajectories are modeled via continuous piecewise linear functions fitted through deterministic Ordinary Least Squares (OLS), requiring zero iterative gradient descent.
-    \item \textbf{Silicon-Friendly Streaming Pipeline:} Sequential temporal iteration yields unit-stride memory accesses with negligible line-buffer footprint, enabling $>240$~FPS software decode speeds.
+    \item \textbf{$O(1)$ Working Memory State:} Decoders do not require multi-frame Decoded Picture Buffers (DPB) or 2D block reconstruction buffers; each output frame is synthesized via direct linear evaluation, yielding streamable, low-latency execution.
 \end{itemize}
 
-\section{Mathematical Formulation of Temporal Regression}
+\section{Related Work}
 
-\subsection{1D Temporal Trajectory Model}
-Let a video sequence be represented in full-color RGB coordinates as a discrete tensor $V(x, y, t) \in [0, 255]^3$, where $(x, y) \in [0, W-1] \times [0, H-1]$ denotes spatial coordinates and $t \in \{0, 1, \dots, T-1\}$ denotes discrete frame indices within a temporal chunk of length $T$.
+\subsection{Standard Hybrid Video Codecs}
+Standard video codecs (H.264/AVC \cite{wiegand2003overview}, H.265/HEVC \cite{sullivan2012overview}, AV1 \cite{chen2020overview}, VVC \cite{bross2021overview}) rely on the hybrid block-based motion-compensated transform coding framework. These architectures depend heavily on inter-frame motion estimation (ME) and motion compensation (MC) to eliminate temporal redundancy, followed by 2D spatial DCT/DST transforms on prediction residuals. While deblocking and sample adaptive offset (SAO) in-loop filters mitigate block edge discontinuities, they act as low-pass smoothing operators that can further blur sharp single-pixel text stems.
 
-Rather than partitioning the 2D spatial grid $(x, y)$ into blocks, TFC fixes $(x, y)$ and analyzes the 1D temporal signal:
-\begin{equation}
-    s_{x,y}(t) = V(x, y, t), \quad t \in [0, T-1].
-\end{equation}
-
-For screen content, static desktop backgrounds, reading text, and UI panels remain invariant over substantial durations ($s_{x,y}(t) \approx \text{const}$). Dynamic elements (e.g., cursor blinking, scrolling, smooth transitions, or video playback) manifest as either constant segments, linear intensity ramps, or discrete step changes.
-
-\subsection{Piecewise Linear Regression via OLS}
-TFC approximates $s_{x,y}(t)$ by parametric temporal basis functions. The primary operational modes are:
+\subsection{Screen Content Coding (SCC) Extensions}
+Recognizing the limitations of standard transform coding on non-camera video, standards bodies developed HEVC Screen Content Coding (HEVC-SCC) extensions \cite{xu2015overview}, later adapted into AV1 IntraBC \cite{chen2020overview} and VVC SCC tools \cite{bross2021overview}. SCC introduced:
 \begin{enumerate}
-    \item \textbf{Mode 0 (Constant):} $\hat{s}(t) = \bar{s}$.
-    \item \textbf{Mode 1 (Linear):} $\hat{s}(t) = a + b \cdot t$.
-    \item \textbf{Mode 2 (Residual Matrix Decomposition):} Low-rank temporal projection for complex non-linear textures.
+    \item \textbf{Intra Block Copy (IBC):} Treating previously reconstructed regions of the current picture as reference blocks for block-matching motion compensation.
+    \item \textbf{Palette Mode:} Representing blocks with a small set of discrete index colors rather than frequency transform coefficients.
 \end{enumerate}
 
-For Mode 1, the optimal parameters $(a^*, b^*)$ minimizing the Mean Squared Error (MSE) over $t \in [0, T-1]$ are determined analytically via closed-form OLS:
+Although SCC significantly improves screen compression efficiency, IBC and Palette modes remain tightly coupled to the 2D block partitioning tree. In hardware decoders, IBC requires large on-chip SRAM search buffers ($>128$~KB) to store spatial reference pixels across the current picture row, introducing silicon routing congestion, timing closure challenges, and high memory bandwidth demands that have historically hindered ubiquitous deployment in mobile decoders.
+
+\subsection{Learned and Neural Video Codecs}
+Recent research has increasingly focused on end-to-end learned video compression frameworks, originating from nonlinear transform coding by Ball{\'e} et al. \cite{balle2018variational} and extended to video via optical flow warping, such as DVC (Deep Video Compression) by Lu et al. \cite{lu2019dvc} and scale-space flow by Agustsson et al. \cite{agustsson2020scale}.
+
+While neural codecs demonstrate impressive rate-distortion curves on natural video, TimeFlowCodec is \textbf{deliberately non-learned}:
+\begin{enumerate}
+    \item \textit{Computational Complexity:} Neural decoders require dedicated neural processing units (NPUs) or high-wattage GPUs with millions of MAC operations per frame, rendering them impractical for resource-constrained embedded devices, web browsers, or lightweight virtual desktop client agents.
+    \item \textit{Spatial Artifacts:} Autoencoder latent spaces apply continuous downsampling and upsampling convolutions that blur sharp text glyphs and sharp contrast edges in a manner analogous to spatial frequency truncation.
+    \item \textit{Determinism and Simplicity:} TimeFlowCodec relies on exact closed-form algebraic operations requiring zero weights, zero training datasets, zero matrix inversions, and microsecond-level execution in ANSI C99 or WebAssembly.
+\end{enumerate}
+
+\subsection{Pixel Trajectory and Temporal Modeling}
+Earlier explorations by Esche et al. \cite{esche2010novel} and Krutz et al. \cite{krutz2013adaptive} examined modeling video along motion trajectories across time. However, these systems applied temporal modeling primarily to natural video as an in-loop enhancement or pre-filtering pass prior to 2D spatial DCT compaction. TimeFlowCodec diverges fundamentally by employing 1D temporal regression as the \textit{sole primary coding engine}, completely abandoning 2D spatial transforms.
+
+\section{Mathematical Formulation and Method}
+
+\subsection{1D Temporal Trajectory Model}
+Let a video sequence be represented in full-color coordinates as a discrete tensor $V(x, y, t) \in [0, 255]^C$, where $(x, y) \in [0, W-1] \times [0, H-1]$ denotes spatial coordinates, $C \in \{1, 3\}$ denotes color channels, and $t \in \{0, 1, \dots, T-1\}$ represents discrete frame indices within a temporal chunk of length $T$.
+
+Fixing the spatial coordinate $(x, y)$ and color plane $c$, we define the 1D temporal signal:
 \begin{equation}
-    \min_{a, b} \mathcal{L}(a, b) = \sum_{t=0}^{T-1} \left( s(t) - (a + b \cdot t) \right)^2.
+    s(t) = V(x, y, t, c), \quad t \in [0, T-1].
 \end{equation}
 
-Setting partial derivatives $\frac{\partial \mathcal{L}}{\partial a} = 0$ and $\frac{\partial \mathcal{L}}{\partial b} = 0$ yields the normal equations. Using centered temporal coordinates $\tau = t - \bar{t}$ with $\bar{t} = \frac{T-1}{2}$, the covariance term simplifies to:
-\begin{equation}
-    b^* = \frac{\sum_{t=0}^{T-1} (t - \bar{t}) \cdot s(t)}{\sum_{t=0}^{T-1} (t - \bar{t})^2}, \quad a^* = \bar{s} - b^* \bar{t},
-\end{equation}
-where $\bar{s} = \frac{1}{T}\sum_{t=0}^{T-1} s(t)$. Because the denominator $\sum_{t=0}^{T-1} (t - \bar{t})^2 = \frac{T(T^2 - 1)}{12}$ depends solely on chunk length $T$, it is precomputed as a constant scalar multiplier, reducing OLS parameter estimation to a single $O(T)$ pass over the temporal trajectory.
+For screen content, pixels exhibit long periods of static invariance ($s(t) \approx \text{const}$) punctuated by linear transitions (fades, smooth scrolling, progressive rendering) or sudden discrete steps.
 
-\subsection{Adaptive Temporal Knot Splitting}
-When motion or scene cuts violate the single-segment linear assumption, fitting a single line over $[0, T-1]$ yields a maximum residual error exceeding an error tolerance $\tau_{\text{tol}}$:
+\subsection{Closed-Form Ordinary Least Squares (OLS)}
+For each pixel trajectory $s(t)$, TimeFlowCodec models the temporal evolution with a continuous 1D linear polynomial:
 \begin{equation}
-    \max_{t \in [0, T-1]} |s(t) - \hat{s}(t)| > \tau_{\text{tol}}.
+    \hat{s}(t) = a + b \cdot t.
 \end{equation}
-In this case, TFC performs adaptive recursive temporal splitting. The split knot $t_{\text{split}}$ is chosen at the point of maximum absolute curvature or edge gradient:
+
+The optimal intercept $a^*$ and slope $b^*$ minimizing the Sum of Squared Residuals (SSR) under uniform temporal weighting $w(t) = 1$ are formulated as:
 \begin{equation}
-    t_{\text{split}} = \arg\max_{t} |s(t+1) - s(t)|.
+    \min_{a, b} \mathcal{L}(a, b) = \sum_{t=0}^{T-1} \left(s(t) - (a + b \cdot t)\right)^2.
 \end{equation}
-The segment is partitioned into $[0, t_{\text{split}}]$ and $[t_{\text{split}}+1, T-1]$, and OLS parameters are solved independently for each sub-interval.
+
+Setting $\frac{\partial \mathcal{L}}{\partial a} = 0$ and $\frac{\partial \mathcal{L}}{\partial b} = 0$ yields the standard normal equations. With discrete temporal indices $t \in \{0, 1, \dots, T-1\}$, the temporal basis moments depend solely on chunk length $T$ and are precomputed analytically:
+\begin{align}
+    S_t &= \sum_{t=0}^{T-1} t = \frac{T(T-1)}{2}, \\
+    S_{t^2} &= \sum_{t=0}^{T-1} t^2 = \frac{T(T-1)(2T-1)}{6}, \\
+    \Delta &= T \cdot S_{t^2} - (S_t)^2 = \frac{T^2(T^2-1)}{12}.
+\end{align}
+
+Let $S_s = \sum_{t=0}^{T-1} s(t)$ and $S_{ts} = \sum_{t=0}^{T-1} t \cdot s(t)$. The closed-form OLS estimators are:
+\begin{equation}
+    b^* = \frac{T \cdot S_{ts} - S_t \cdot S_s}{\Delta}, \quad a^* = \frac{S_s - b^* \cdot S_t}{T}.
+\end{equation}
+
+\textbf{Arithmetic Precision:} The encoder evaluates moment summations and parameter estimation using 64-bit IEEE 754 floating-point arithmetic (\texttt{float64}). The decoder evaluates the linear polynomial $\hat{s}(t) = a + b \cdot t$ using single-precision 32-bit floating point (\texttt{float32}), utilizing SIMD vector fused multiply-accumulate instructions (ARM NEON \texttt{vmlaq\_f32}), and clamps the result to $[0, 255]$ via rounding (\texttt{clamp\_u8}).
 
 \begin{figure}[t]
     \centering
@@ -117,36 +135,74 @@ The segment is partitioned into $[0, t_{\text{split}}]$ and $[t_{\text{split}}+1
     \label{fig:arch}
 \end{figure}
 
-\section{System Architecture and Bitstream}
-
-\subsection{Encoder and Decoder Pipeline}
-Fig.~\ref{fig:arch} illustrates the complete system architecture of TimeFlowCodec v5:
+\subsection{Adaptive Per-Pixel Mode Selection}
+Each pixel trajectory is classified into one of three primary operational modes:
 \begin{enumerate}
-    \item \textbf{Temporal Chunking:} The input video is ingested in bounded windows of $T$ frames (default $T=16$ or $T=32$), constraining maximum encoder memory footprint to $O(W \cdot H \cdot T)$.
-    \item \textbf{Motion Compensation with Signed Offsets:} For moving window elements, integer translational displacement vectors $(\Delta x, \Delta y)$ are estimated per tile ($16\times 16$). Warped pixel trajectories are aligned temporally before regression.
-    \item \textbf{Temporal Fitting Engine:} Each pixel trajectory is classified into Mode 0, Mode 1, or Mode 2 based on rate-distortion cost $J = D + \lambda R$.
-    \item \textbf{Residual Quantization:} Sparse residual differences $r(x, y, t) = s(x, y, t) - \hat{s}(x, y, t)$ are quantized using dead-zone uniform scalar quantization with step size $Q_{\text{step}}$.
-    \item \textbf{Context Entropy Coding:} Parameter slopes $b$, intercepts $a$, and sparse quantized residuals are serialized through an adaptive arithmetic/LZMA entropy engine.
+    \item \textbf{Mode 0 (CONST):} Pixel is static over the chunk. $\hat{s}(t) = \bar{s} = \text{round}(S_s / T)$.
+    \item \textbf{Mode 1 (LINEAR):} Pixel follows a continuous linear trend. $\hat{s}(t) = a^* + b^* \cdot t$.
+    \item \textbf{Mode 2 (RAW Fallback):} The linear model fails to approximate the signal within error tolerance. The pixel stores the linear predictor plus explicit quantized residual corrections $r(t) = s(t) - \hat{s}(t)$.
 \end{enumerate}
 
-\subsection{The v5 Container Specification}
-The serialized bitstream conforms to the formal TimeFlowCodec v5 specification:
+The Residual Sum of Squares (RSS) and total signal energy are evaluated:
+\begin{align}
+    \text{RSS} &= S_{s^2} - 2a^* S_s - 2b^* S_{ts} + (a^*)^2 T + 2a^* b^* S_t + (b^*)^2 S_{t^2}, \\
+    D_{\text{tfc}} &= \frac{\text{RSS}}{T}, \quad D_{\text{sig}} = \frac{S_{s^2}}{T} + \epsilon.
+\end{align}
+
+The relative error ratio is defined as $r = D_{\text{tfc}} / D_{\text{sig}}$. A pixel selects \textbf{Mode 1 (LINEAR)} if:
+\begin{equation}
+    r < \tau \quad \text{and} \quad |b^*| > \theta_{\text{slope}},
+\end{equation}
+where $\tau$ is the error ratio threshold [VERIFY: default $\tau = 0.1$, operational range 0.01 to 0.20], $\theta_{\text{slope}}$ is the minimum slope threshold [VERIFY: default $10^{-3}$], and $\epsilon = 10^{-8}$.
+
+If $|b^*| \le \theta_{\text{slope}}$ and $r < \tau$, the pixel is classified as \textbf{Mode 0 (CONST)}. If $r \ge \tau$, the linear model is rejected, and the pixel falls back to \textbf{Mode 2 (RAW)}. When Lagrangian Rate-Distortion Optimization (RDO) is enabled, the encoder minimizes $J = D + \lambda R$.
+
+\subsection{Coefficient Quantization}
+Parameters are quantized prior to bitstream serialization:
 \begin{itemize}
-    \item \textbf{Global Header (32 bytes):} Magic bytes (\texttt{TFC5}), stream version, frame dimensions $W \times H$, rational framerate numerator/denominator, color space flags (native 4:4:4 RGB), and audio stream presence.
-    \item \textbf{Chunk Structure:} Each chunk begins with a 16-byte chunk header containing chunk frame count $T$, compressed payload byte length, and a CRC32 integrity checksum.
-    \item \textbf{Demuxing and Random Access:} Individual chunks are independently decodable, providing robust random access points and bounded seeking latency.
+    \item \textbf{Intercept $a^*$:} Quantized to an 8-bit unsigned integer by rounding to the nearest integer: $a_q = \text{clip}\left(\lfloor a^* + 0.5 \rfloor, 0, 255\right)$.
+    \item \textbf{Slope $b^*$:} Scaled relative to the maximum absolute slope in the chunk plane $b_{\max} = \max(|b^*|)$ and quantized to a 16-bit signed integer: $s_b = b_{\max} / 32767.0$, $b_q = \text{clip}\left(\lfloor b^* / s_b + 0.5 \rfloor, -32768, 32767\right)$. Scale factor $s_b$ is transmitted as a 32-bit float in the segment header.
+    \item \textbf{Residuals $r(t)$ (Mode 2):} Quantized using dead-zone uniform scalar quantization with step size $Q_{\text{step}} \in [1, 255]$: $r_q(t) = \text{round}\left((s(t) - \hat{s}(t)) / Q_{\text{step}}\right)$.
 \end{itemize}
 
-\section{Experimental Methodology}
+\section{System Architecture and Bitstream}
 
-\subsection{JVET-SCC Common Test Conditions}
-To ensure academic rigor, we evaluate TimeFlowCodec following the Joint Video Exploration Team (JVET) Common Test Conditions for Screen Content Coding \cite{jvet2016ctc}. Four canonical benchmark sequences were generated matching standard SCC test categories:
+\subsection{Pipeline and Temporal Chunking}
+As shown in Fig.~\ref{fig:arch}, the encoder ingests video in bounded temporal windows of $T$ frames (typically $T=16$ or $T=32$). This bounds encoder memory to $O(W \cdot H \cdot T)$.
+
+\subsection{Container Format Specification}
+All multi-byte numeric primitives are serialized in \textbf{little-endian} byte order:
+\begin{itemize}
+    \item \textbf{Legacy Fixed Container (TFC1, Versions 1--4):} Magic bytes \texttt{TFC1}, version byte (0x01--0x04), width $W$ (uint32), height $H$ (uint32), frame count (uint32), color format flag, mode bit-depth (fixed to 2), compression type (0=None, 1=zlib, 2=LZMA, 3=zstd), and segment count.
+    \item \textbf{Streaming Container (TFC5, Version 5):} Magic bytes \texttt{TFC5}, followed by a 4-byte JSON metadata length, a JSON metadata block (containing width, height, exact rational framerate numerator/denominator, and audio descriptors), followed by self-contained chunks with 16-byte chunk headers (chunk frame count $T$, compressed payload byte length, and CRC-32 checksum).
+\end{itemize}
+
+\subsection{Payload Serialization}
+Within each plane payload:
 \begin{enumerate}
-    \item \textbf{Desktop UI (\texttt{scc\_animation\_ui}):} Code editor with active syntax highlighting, file tree navigation, and scrolling.
-    \item \textbf{Presentation Slides (\texttt{scc\_slideshow}):} Vector diagrams, high-contrast serif typography, and abrupt slide transitions.
-    \item \textbf{Synthetic Animation (\texttt{scc\_console\_code}):} High-framerate vector motion with flat color regions and precise boundaries.
-    \item \textbf{Natural Video (\texttt{scc\_natural}):} Camera footage containing continuous optical texture, noise, and lighting gradients.
+    \item \textbf{Mode Map:} Pixel modes are packed at 2 bits per mode (4 pixels per byte) and compressed using Run-Length Encoding (RLE) with a 2-byte run length and 1-byte value.
+    \item \textbf{Coefficients:} Intercepts $a_q$ for Mode 0/1 and slopes $b_q$ for Mode 1 are serialized contiguously in raster scan order.
+    \item \textbf{Residual Streams:} Mode 2 quantized residual delta arrays are stored contiguously.
+    \item \textbf{Entropy Coding:} Serialized streams are compressed using zlib, LZMA, or zstd.
 \end{enumerate}
+
+\subsection{Color Space Handling}
+\begin{itemize}
+    \item \textbf{Native 4:4:4 RGB:} Red, green, and blue planes are encoded independently at full spatial resolution, providing zero color decimation and zero matrix rounding loss.
+    \item \textbf{YUV444 Mode:} RGB is transformed via standard BT.601 float conversion matrices into $Y'U'V'$ planes, preserving full 4:4:4 spatial sampling.
+    \item \textbf{YUV420 Fallback:} For low-bitrate constraints, chroma channels are $2\times 2$ average-pooled, though this mode is discouraged for text-heavy content due to legibility penalties.
+\end{itemize}
+
+\subsection{Decoder Memory Bound ($O(1)$ State)}
+Traditional video decoders require a Decoded Picture Buffer (DPB) holding multiple uncompressed reference frames to resolve motion vectors across P- and B-frames. For 4K RGB24 ($3840 \times 2160$), a single reference frame requires $24.88$~MB; a 16-frame DPB consumes nearly $400$~MB.
+
+In contrast, TimeFlowCodec possesses an \textbf{$O(1)$ working memory bound}:
+\begin{itemize}
+    \item Decoding does not depend on prior frames. Reconstructing a pixel at frame $t$ depends strictly on its current chunk parameters $(a_q, b_q)$ and residual $r_q(t)$.
+    \item Pixels are reconstructed sequentially or in parallel without inter-pixel spatial dependencies. When rendered directly to a display buffer or scanline stream, line-buffer memory requirement is \textbf{0 lines}.
+\end{itemize}
+
+\section{Experimental Evaluation and Methodology}
 
 \begin{figure*}[t]
     \centering
@@ -155,90 +211,79 @@ To ensure academic rigor, we evaluate TimeFlowCodec following the Joint Video Ex
     \label{fig:artifacts}
 \end{figure*}
 
-\subsection{Anchor Codecs and Metrics}
-TimeFlowCodec is evaluated against standard production implementations:
-\begin{itemize}
-    \item \textbf{H.264/AVC:} FFmpeg \texttt{libx264} (preset \texttt{medium}, Constant Rate Factor $CRF \in \{18, 23, 28, 33\}$).
-    \item \textbf{H.265/HEVC:} FFmpeg \texttt{libx265} (preset \texttt{medium}, $CRF \in \{18, 23, 28, 33\}$).
-\end{itemize}
+\subsection{Proposed Benchmark Framework}
+To establish reproducible empirical rate-distortion metrics, TimeFlowCodec should be evaluated according to the Joint Video Exploration Team (JVET) Common Test Conditions (CTC) for Screen Content Coding \cite{jvet2016ctc}:
+\begin{enumerate}
+    \item \textbf{Benchmark Sequences:} Desktop UI, presentation slides, terminal screencasts, and natural camera video.
+    \item \textbf{Anchor Codecs:} H.264/AVC (\texttt{libx264}, preset \texttt{medium}), H.265/HEVC (\texttt{libx265}, preset \texttt{medium}, with and without SCC/IBC flags), and AV1 (\texttt{libaom-av1} / \texttt{svt-av1}) across $CRF \in \{18, 23, 28, 33\}$.
+    \item \textbf{Objective Metrics:} Bjontegaard Delta Rate (BD-Rate \%) and BD-PSNR (dB) strictly adhering to ITU-T VCEG-M33 \cite{bjontegaard2001calculation}, Multi-Scale Structural Similarity (MS-SSIM) \cite{wang2004image}, and 1D Edge Profile Overshoot (\%).
+\end{enumerate}
 
-Objective visual quality is evaluated using Peak Signal-to-Noise Ratio (PSNR) and Structural Similarity (SSIM) \cite{wang2004image}. To summarize Rate-Distortion performance across the entire bitrate range, we compute the \textbf{Bjontegaard Delta rate (BD-Rate \%)} and \textbf{Bjontegaard Delta PSNR (BD-PSNR dB)} strictly adhering to ITU-T VCEG-M33 \cite{bjontegaard2001calculation}. A negative BD-Rate indicates bitstream savings for equivalent visual quality.
-
-\section{Results and Discussion}
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=\columnwidth]{rd_slides.pdf}
+    \caption{Rate-Distortion curve for Presentation Slides (\texttt{scc\_slideshow}) comparing TimeFlowCodec against H.264/AVC and H.265/HEVC [VERIFY: illustrative curve; empirical numbers pending standardized execution].}
+    \label{fig:rd_slides}
+\end{figure}
 
 \begin{table}[t]
 \centering
-\caption{Bjontegaard Delta Rate (BD-Rate) and BD-PSNR of TimeFlowCodec vs. H.264/AVC (libx264) Anchor (ITU-T VCEG-M33)}
+\caption{Planned Bjontegaard Delta Rate (BD-Rate) Evaluation Protocol vs. H.264 Anchor (ITU-T VCEG-M33) [VERIFY: Pending execution]}
 \label{tab:bd_rates}
 \resizebox{\columnwidth}{!}{
 \begin{tabular}{lrr}
 \toprule
 \textbf{Benchmark Sequence} & \textbf{BD-Rate (\%)} & \textbf{BD-PSNR (dB)} \\
 \midrule
-Desktop UI (\texttt{scc\_animation\_ui}) & $\mathbf{-31.2\%}$ & $\mathbf{+2.41}$ dB \\
-Presentation Slides (\texttt{scc\_slideshow}) & $\mathbf{-34.5\%}$ & $\mathbf{+2.85}$ dB \\
-Synthetic Animation (\texttt{scc\_console\_code}) & $\mathbf{-28.4\%}$ & $\mathbf{+2.12}$ dB \\
-Natural Camera Video (\texttt{scc\_natural}) & $+14.8\%$ & $-1.05$ dB \\
+Desktop UI (\texttt{scc\_animation\_ui}) & [VERIFY] & [VERIFY] \\
+Presentation Slides (\texttt{scc\_slideshow}) & [VERIFY] & [VERIFY] \\
+Synthetic Animation (\texttt{scc\_console\_code}) & [VERIFY] & [VERIFY] \\
+Natural Camera Video (\texttt{scc\_natural}) & [VERIFY] & [VERIFY] \\
 \midrule
-\textbf{Screen Content Average (SCC)} & $\mathbf{-26.8\%}$ & $\mathbf{+2.18}$ dB \\
+\textbf{Screen Content Average (SCC)} & [VERIFY] & [VERIFY] \\
 \bottomrule
 \end{tabular}
 }
 \end{table}
 
-\subsection{Rate-Distortion Performance}
-Table~\ref{tab:bd_rates} summarizes the quantitative Bjontegaard Delta metrics. On screen content categories, TimeFlowCodec demonstrates significant coding gains over the H.264 anchor:
-\begin{itemize}
-    \item On \textbf{Presentation Slides}, TFC achieves a $\mathbf{-34.5\%}$ BD-Rate reduction and a $\mathbf{+2.85}$~dB BD-PSNR increase. Because slide backgrounds and text are temporally stationary, the OLS engine allocates zero bitrate to spatial residuals.
-    \item On \textbf{Desktop UI}, TFC achieves a $\mathbf{-31.2\%}$ BD-Rate savings, accurately capturing localized editor updates without triggering whole-frame block partitions.
-    \item On \textbf{Natural Video}, TFC incurs a $+14.8\%$ BD-Rate penalty. Natural video contains sensor shot noise and non-rigid physical motion that require 2D spatial DCT frequency compaction, confirming the domain-specific nature of TFC.
-\end{itemize}
-
-\begin{figure}[t]
-    \centering
-    \includegraphics[width=\columnwidth]{rd_slides.pdf}
-    \caption{Rate-Distortion curve for Presentation Slides (\texttt{scc\_slideshow}) comparing TimeFlowCodec against H.264/AVC and H.265/HEVC.}
-    \label{fig:rd_slides}
-\end{figure}
-
-Fig.~\ref{fig:rd_slides} plots the rate-distortion curves for the slides sequence. TFC consistently dominates the H.264 curve across all bitrates and achieves parity with HEVC at higher quality levels while using native 4:4:4 representation.
+\textbf{Status of Rate-Distortion Claims:} [VERIFY: Formal empirical BD-rate percentages, PSNR curves, and rate-distortion tables are currently unverified pending standardized execution of the JVET-SCC test suite under identical operating system and machine conditions. No empirical numbers are asserted as finalized facts in this section.]
 
 \subsection{Qualitative Visual Inspection and Ringing Analysis}
-Fig.~\ref{fig:artifacts} presents a visual comparison of a text glyph reconstructed under standard block DCT vs. TimeFlowCodec. In Panel (c), block-based transform coding truncates high-frequency basis functions, producing pronounced Gibbs ringing ripples around text stems alongside severe color fringing from 4:2:0 subsampling.
+Consider an idealized 1D spatial step edge representing a black-on-white text boundary:
+\begin{equation}
+    f(x) = \begin{cases} 0 & x < 0 \\ 1 & x \ge 0 \end{cases}
+\end{equation}
 
-Panel (d) plots the 1D horizontal intensity profile across the step edge. The block DCT curve exhibits greater than $10\%$ overshoot and oscillatory ripples extending into adjacent background pixels. In contrast, TimeFlowCodec operates along time for each spatial coordinate, preserving the sharp discrete spatial transition with zero spatial overshoot.
+When decomposed into spatial Fourier or DCT basis functions and quantized, truncating the series at frequency cutoff $K$ yields the partial reconstruction:
+\begin{equation}
+    f_K(x) = \frac{1}{2} + \frac{1}{\pi}\int_0^{K x} \frac{\sin u}{u} du.
+\end{equation}
 
-\subsection{Hardware and Complexity Implications}
-A critical advantage of TimeFlowCodec lies in its decode memory access pattern. Standard HEVC-SCC Intra Block Copy (IBC) requires decoders to maintain large 2D on-chip SRAM search buffers to handle arbitrary 2D spatial displacement vectors. This creates complex routing barriers in silicon.
+As $K \to \infty$, the reconstructed signal overshoots the true step by the Wilbraham-Gibbs constant:
+\begin{equation}
+    \lim_{K \to \infty} \max f_K(x) = \frac{1}{2} + \frac{1}{\pi} \text{Si}(\pi) \approx 1.08949,
+\end{equation}
+yielding an asymptotic minimum $\approx 8.95\%$ overshoot ripple. In 2D block transform coding, this overshoot manifests as visible mosquito noise ringing into surrounding pixels, as illustrated in Fig.~\ref{fig:artifacts}(c) and (d).
 
-In contrast, TFC decoding consists of evaluating $\hat{s}(t) = a + b \cdot t$. For each pixel, parameters $(a, b)$ are read once per chunk and expanded into a linear frame buffer via contiguous, unit-stride memory writes. Our standalone zero-dependency ANSI C99 reference decoder (\texttt{libtfc}) achieves $>840$~FPS decode throughput on 720p video ($>2{,}200$~MB/s raw RGB24) and $>380$~FPS on 1080p video on consumer x86/ARM processors. Hardware power monitoring via \texttt{powermetrics} revealed an average package power dissipation of $0.85\text{ W}$ during 1080p60 playback compared to $3.42\text{ W}$ for software AV1 decoding, representing an approximate $75\%$ reduction in decoder power consumption. Table~\ref{tab:complexity} highlights the comparative throughput and line buffer requirements.
+In contrast, TimeFlowCodec operates strictly along the time dimension at fixed spatial coordinates $(x_0, y_0)$. Spatial derivatives are never transformed into the frequency domain. If a text pixel remains static, Mode 0 assigns $\hat{s}(t) = \bar{s}$ exactly; if text scrolls or renders, the temporal function models the intensity change without altering spatial neighborhood values. Spatial step discontinuities remain mathematically discontinuous, with \textbf{identically zero Gibbs overshoot} (Fig.~\ref{fig:artifacts}(b)).
 
-\begin{table}[t]
-\centering
-\caption{Decoder Throughput and Memory Access Profile (1080p60 Video on Intel Core i7-12700H)}
-\label{tab:complexity}
-\resizebox{\columnwidth}{!}{
-\begin{tabular}{lrrr}
-\toprule
-\textbf{Codec} & \textbf{FPS} & \textbf{Decode CPU (\%)} & \textbf{Line Buffer} \\
-\midrule
-H.264 (\texttt{ffh264}) & 185 & 42\% & 16 lines \\
-H.265 (\texttt{ffhevc}) & 110 & 68\% & 64 lines \\
-HEVC-SCC (IBC) & 74 & 89\% & Full CTU Row ($>128$ KB) \\
-\textbf{TimeFlowCodec (\texttt{libtfc} C99)} & $\mathbf{384}$ & $\mathbf{12\%}$ & $\mathbf{0}$ \textbf{lines (Sequential)} \\
-\bottomrule
-\end{tabular}
-}
-\end{table}
+\subsection{Decoder Complexity and Throughput}
+A standalone zero-dependency C99 reference decoder (\texttt{libtfc}) was implemented in \texttt{libtfc/src/tfc\_decoder.c}. Because reconstruction reduces to evaluating $a_q + b_q \cdot t$, pixel generation exhibits unit-stride memory accesses with zero branch prediction stalls in the inner loop.
+
+\textbf{Status of Throughput Claim:} [VERIFY: The previously reported headline claim of ``$>840$ FPS'' decode throughput was observed during preliminary bench runs on raw synthetic test buffers. It requires standardized resolution (e.g., 720p vs. 1080p), test clip characteristics, compiler flags, and explicit host CPU model documentation before it can be cited as a reproducible benchmark result. It is retained here as a target metric pending verification.]
 
 \section{Conclusion and Future Work}
-This paper introduced TimeFlowCodec, an orthogonal video coding architecture designed specifically for screen and synthetic video. By discarding 2D spatial block transforms in favor of 1D per-pixel temporal regression with native 4:4:4 RGB representation, TFC eliminates Gibbs ringing artifacts around text edges and achieves an average $-26.8\%$ BD-Rate reduction over H.264 on JVET-SCC sequences. Furthermore, the absence of 2D spatial filtering enables sequential memory writes delivering $>380$~FPS 1080p decode throughput.
+TimeFlowCodec introduces an orthogonal approach to screen content video compression by eliminating 2D spatial block transforms in favor of 1D per-pixel closed-form temporal regression. By avoiding spatial frequency quantization, TFC eliminates Gibbs ringing artifacts around sharp text edges, natively preserves 4:4:4 RGB color fidelity, and achieves $O(1)$ working memory state in the decoder.
 
 Future research directions include:
 \begin{enumerate}
-    \item \textbf{AVX-512 and Metal Compute Kernels:} Accelerating the per-pixel OLS regression engine on modern SIMD hardware.
-    \item \textbf{Hybrid Temporal-Spatial Mode Switching:} Integrating an adaptive classifier that dynamically transitions between 1D temporal regression and 2D spatial transforms for mixed screen/camera content.
+    \item Conducting the standardized JVET-SCC rate-distortion benchmark suite against x264, x265, and AV1 to establish authoritative BD-rate curves.
+    \item Formulating integer-only fixed-point arithmetic for the decoder to ensure bit-exact cross-platform reproduction without floating-point divergence.
+    \item Integrating hardware-accelerated AVX-512 and ARM NEON kernels for the encoder's temporal moment accumulation pass.
 \end{enumerate}
+
+\section*{Acknowledgment and AI Disclosure}
+The author acknowledges the use of AI-assisted coding tools (including Claude and Gemini coding assistants) as development aids for code scaffolding, build automation scripting, and test harnesses during the development of TimeFlowCodec. All architectural concepts, mathematical derivations, and manuscript writing were directed by the human author.
 
 \bibliographystyle{IEEEtran}
 \bibliography{references}
