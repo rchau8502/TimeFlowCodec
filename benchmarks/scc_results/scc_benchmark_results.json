@@ -1,6 +1,17 @@
 {
-  "timestamp": "2026-10-01 10:47:13",
+  "timestamp": "2026-10-13 12:54:45",
   "points": [
+    {
+      "codec": "x264",
+      "clip": "scc_slideshow",
+      "param_label": "CRF=18",
+      "rate_kbps": 25.616,
+      "size_bytes": 9606,
+      "psnr": 39.98814077501468,
+      "ssim": 0.9959706966637961,
+      "encode_time_s": 0.35281395800120663,
+      "decode_time_s": 0.321797291006078
+    },
     {
       "codec": "x264",
       "clip": "scc_slideshow",
@@ -9,8 +20,8 @@
       "size_bytes": 8382,
       "psnr": 39.57589277474175,
       "ssim": 0.9959876973204488,
-      "encode_time_s": 0.16816524999740068,
-      "decode_time_s": 0.12911429100495297
+      "encode_time_s": 0.29629341699182987,
+      "decode_time_s": 0.21489141600613948
     },
     {
       "codec": "x264",
@@ -20,30 +31,74 @@
       "size_bytes": 7666,
       "psnr": 39.560525432543564,
       "ssim": 0.9961435413113711,
-      "encode_time_s": 0.20698970899684355,
-      "decode_time_s": 0.14724291700258618
+      "encode_time_s": 0.29163337500358466,
+      "decode_time_s": 0.19010474999959115
+    },
+    {
+      "codec": "x264",
+      "clip": "scc_slideshow",
+      "param_label": "CRF=33",
+      "rate_kbps": 22.250666666666667,
+      "size_bytes": 8344,
+      "psnr": 38.26270458585191,
+      "ssim": 0.9928117625514431,
+      "encode_time_s": 0.26889837499766145,
+      "decode_time_s": 0.19046187499770895
+    },
+    {
+      "codec": "tfc",
+      "clip": "scc_slideshow",
+      "param_label": "tau=0.0001",
+      "rate_kbps": 41.59466666666667,
+      "size_bytes": 15598,
+      "psnr": Infinity,
+      "ssim": 1.0,
+      "encode_time_s": 61.233464375007316,
+      "decode_time_s": 2.657158709000214
     },
     {
       "codec": "tfc",
       "clip": "scc_slideshow",
       "param_label": "tau=0.001",
-      "rate_kbps": 83.544,
-      "size_bytes": 31329,
-      "psnr": 67.0606809507608,
-      "ssim": 0.9999902859152185,
-      "encode_time_s": 20.935202624998055,
-      "decode_time_s": 2.4268177500052843
+      "rate_kbps": 41.44,
+      "size_bytes": 15540,
+      "psnr": 67.08078056596526,
+      "ssim": 0.9999905007949734,
+      "encode_time_s": 42.535576000009314,
+      "decode_time_s": 3.2325071670056786
     },
     {
       "codec": "tfc",
       "clip": "scc_slideshow",
       "param_label": "tau=0.005",
-      "rate_kbps": 76.83466666666666,
-      "size_bytes": 28813,
-      "psnr": 47.78087287766009,
-      "ssim": 0.9996604378499748,
-      "encode_time_s": 22.07721270800539,
-      "decode_time_s": 2.4447687910069362
+      "rate_kbps": 38.81333333333333,
+      "size_bytes": 14555,
+      "psnr": 47.78107577002189,
+      "ssim": 0.9996606302242567,
+      "encode_time_s": 40.85275558299327,
+      "decode_time_s": 2.6154773750022287
+    },
+    {
+      "codec": "tfc",
+      "clip": "scc_slideshow",
+      "param_label": "tau=0.02",
+      "rate_kbps": 31.288,
+      "size_bytes": 11733,
+      "psnr": 40.38223777800322,
+      "ssim": 0.9988228809801962,
+      "encode_time_s": 36.043457457999466,
+      "decode_time_s": 1.8872166670043953
+    },
+    {
+      "codec": "x264",
+      "clip": "scc_console_code",
+      "param_label": "CRF=18",
+      "rate_kbps": 52.18,
+      "size_bytes": 13045,
+      "psnr": 40.7965744399539,
+      "ssim": 0.9945370276749753,
+      "encode_time_s": 0.35259950000909157,
+      "decode_time_s": 0.303107458006707
     },
     {
       "codec": "x264",
@@ -53,8 +108,8 @@
       "size_bytes": 11320,
       "psnr": 40.20472844666129,
       "ssim": 0.9925042094986267,
-      "encode_time_s": 0.16312229199684225,
-      "decode_time_s": 0.21302508299413603
+      "encode_time_s": 0.47473579199868254,
+      "decode_time_s": 0.32014549999439623
     },
     {
       "codec": "x264",
@@ -64,30 +119,74 @@
       "size_bytes": 9754,
       "psnr": 39.01237654717835,
       "ssim": 0.9880480074883446,
-      "encode_time_s": 0.17264583299402148,
-      "decode_time_s": 0.21828454099886585
+      "encode_time_s": 0.4004075830016518,
+      "decode_time_s": 0.27257487500901334
+    },
+    {
+      "codec": "x264",
+      "clip": "scc_console_code",
+      "param_label": "CRF=33",
+      "rate_kbps": 35.636,
+      "size_bytes": 8909,
+      "psnr": 37.05835037923076,
+      "ssim": 0.9820066768780711,
+      "encode_time_s": 0.32748304099368397,
+      "decode_time_s": 0.27752308300114237
+    },
+    {
+      "codec": "tfc",
+      "clip": "scc_console_code",
+      "param_label": "tau=0.0001",
+      "rate_kbps": 23.288,
+      "size_bytes": 5822,
+      "psnr": Infinity,
+      "ssim": 1.0,
+      "encode_time_s": 39.79221545800101,
+      "decode_time_s": 2.6464542920002714
     },
     {
       "codec": "tfc",
       "clip": "scc_console_code",
       "param_label": "tau=0.001",
-      "rate_kbps": 29.324,
-      "size_bytes": 7331,
+      "rate_kbps": 23.288,
+      "size_bytes": 5822,
       "psnr": Infinity,
       "ssim": 1.0,
-      "encode_time_s": 19.417271124999388,
-      "decode_time_s": 2.5021457500042743
+      "encode_time_s": 35.10452904200065,
+      "decode_time_s": 1.9677205410116585
     },
     {
       "codec": "tfc",
       "clip": "scc_console_code",
       "param_label": "tau=0.005",
-      "rate_kbps": 29.324,
-      "size_bytes": 7331,
+      "rate_kbps": 23.288,
+      "size_bytes": 5822,
       "psnr": Infinity,
       "ssim": 1.0,
-      "encode_time_s": 19.796103833003144,
-      "decode_time_s": 2.3015393329988
+      "encode_time_s": 33.27459174999967,
+      "decode_time_s": 1.8062007499975152
+    },
+    {
+      "codec": "tfc",
+      "clip": "scc_console_code",
+      "param_label": "tau=0.02",
+      "rate_kbps": 23.288,
+      "size_bytes": 5822,
+      "psnr": Infinity,
+      "ssim": 1.0,
+      "encode_time_s": 36.52416645799531,
+      "decode_time_s": 2.129142834004597
+    },
+    {
+      "codec": "x264",
+      "clip": "scc_web_browsing",
+      "param_label": "CRF=18",
+      "rate_kbps": 43.093333333333334,
+      "size_bytes": 16160,
+      "psnr": 40.55015309869588,
+      "ssim": 0.9973098131236467,
+      "encode_time_s": 0.2953895829996327,
+      "decode_time_s": 0.16284308399190195
     },
     {
       "codec": "x264",
@@ -97,8 +196,8 @@
       "size_bytes": 15269,
       "psnr": 40.09551044965522,
       "ssim": 0.9966129183305645,
-      "encode_time_s": 0.18767216699779965,
-      "decode_time_s": 0.17458433299907483
+      "encode_time_s": 0.3559092920040712,
+      "decode_time_s": 0.1974044579983456
     },
     {
       "codec": "x264",
@@ -108,30 +207,74 @@
       "size_bytes": 16250,
       "psnr": 39.39964071125547,
       "ssim": 0.9947174541996928,
-      "encode_time_s": 0.24340679099987028,
-      "decode_time_s": 0.1843460409945692
+      "encode_time_s": 0.32520287501392886,
+      "decode_time_s": 0.17226899998786394
+    },
+    {
+      "codec": "x264",
+      "clip": "scc_web_browsing",
+      "param_label": "CRF=33",
+      "rate_kbps": 47.477333333333334,
+      "size_bytes": 17804,
+      "psnr": 38.15899810695988,
+      "ssim": 0.9896941363095243,
+      "encode_time_s": 0.4672345410072012,
+      "decode_time_s": 0.23928075000003446
+    },
+    {
+      "codec": "tfc",
+      "clip": "scc_web_browsing",
+      "param_label": "tau=0.0001",
+      "rate_kbps": 347.07466666666664,
+      "size_bytes": 130153,
+      "psnr": Infinity,
+      "ssim": 1.0,
+      "encode_time_s": 26.97021191699605,
+      "decode_time_s": 3.3996418329916196
     },
     {
       "codec": "tfc",
       "clip": "scc_web_browsing",
       "param_label": "tau=0.001",
-      "rate_kbps": 691.1333333333333,
-      "size_bytes": 259175,
-      "psnr": 45.486285288189904,
-      "ssim": 0.9970855621667502,
-      "encode_time_s": 13.046479999997246,
-      "decode_time_s": 3.310653458996967
+      "rate_kbps": 257.07466666666664,
+      "size_bytes": 96403,
+      "psnr": 45.48660000904148,
+      "ssim": 0.9970933675688455,
+      "encode_time_s": 20.735308167000767,
+      "decode_time_s": 2.988617290990078
     },
     {
       "codec": "tfc",
       "clip": "scc_web_browsing",
       "param_label": "tau=0.005",
-      "rate_kbps": 691.1333333333333,
-      "size_bytes": 259175,
-      "psnr": 45.486285288189904,
-      "ssim": 0.9970855621667502,
-      "encode_time_s": 12.78706308400433,
-      "decode_time_s": 3.5882908749990747
+      "rate_kbps": 257.07466666666664,
+      "size_bytes": 96403,
+      "psnr": 45.48660000904148,
+      "ssim": 0.9970933675688455,
+      "encode_time_s": 21.33446733299934,
+      "decode_time_s": 2.9566220000124304
+    },
+    {
+      "codec": "tfc",
+      "clip": "scc_web_browsing",
+      "param_label": "tau=0.02",
+      "rate_kbps": 246.152,
+      "size_bytes": 92307,
+      "psnr": 28.867484840732413,
+      "ssim": 0.976262916069977,
+      "encode_time_s": 20.329667625002912,
+      "decode_time_s": 3.7390143329976127
+    },
+    {
+      "codec": "x264",
+      "clip": "scc_animation_ui",
+      "param_label": "CRF=18",
+      "rate_kbps": 57.12533333333333,
+      "size_bytes": 10711,
+      "psnr": 41.214002451269884,
+      "ssim": 0.993324164178781,
+      "encode_time_s": 0.25603183401108254,
+      "decode_time_s": 0.17114091600524262
     },
     {
       "codec": "x264",
@@ -141,8 +284,8 @@
       "size_bytes": 9538,
       "psnr": 41.11658940776487,
       "ssim": 0.992967334800378,
-      "encode_time_s": 0.17989212499378482,
-      "decode_time_s": 0.15844791699782945
+      "encode_time_s": 0.3074189170001773,
+      "decode_time_s": 0.2043701670045266
     },
     {
       "codec": "x264",
@@ -152,33 +295,83 @@
       "size_bytes": 8745,
       "psnr": 41.018205943040726,
       "ssim": 0.9925338973420088,
-      "encode_time_s": 0.16784483299852582,
-      "decode_time_s": 0.166427834003116
+      "encode_time_s": 0.2813168749999022,
+      "decode_time_s": 0.19727879200945608
+    },
+    {
+      "codec": "x264",
+      "clip": "scc_animation_ui",
+      "param_label": "CRF=33",
+      "rate_kbps": 45.49333333333333,
+      "size_bytes": 8530,
+      "psnr": 40.857214794901736,
+      "ssim": 0.9922400166354853,
+      "encode_time_s": 0.25309166600345634,
+      "decode_time_s": 0.22636754099221434
+    },
+    {
+      "codec": "tfc",
+      "clip": "scc_animation_ui",
+      "param_label": "tau=0.0001",
+      "rate_kbps": 50.38933333333333,
+      "size_bytes": 9448,
+      "psnr": Infinity,
+      "ssim": 1.0,
+      "encode_time_s": 60.22126783400017,
+      "decode_time_s": 3.219619583003805
     },
     {
       "codec": "tfc",
       "clip": "scc_animation_ui",
       "param_label": "tau=0.001",
-      "rate_kbps": 252.02666666666667,
-      "size_bytes": 47255,
-      "psnr": 91.86145980229506,
-      "ssim": 0.999999687700132,
-      "encode_time_s": 17.114768375002313,
-      "decode_time_s": 2.6226602499955334
+      "rate_kbps": 50.38933333333333,
+      "size_bytes": 9448,
+      "psnr": Infinity,
+      "ssim": 1.0,
+      "encode_time_s": 35.938988792011514,
+      "decode_time_s": 2.7417802499985555
     },
     {
       "codec": "tfc",
       "clip": "scc_animation_ui",
       "param_label": "tau=0.005",
-      "rate_kbps": 252.02666666666667,
-      "size_bytes": 47255,
-      "psnr": 91.86145980229506,
-      "ssim": 0.999999687700132,
-      "encode_time_s": 16.82964337500016,
-      "decode_time_s": 2.521835125000507
+      "rate_kbps": 50.38933333333333,
+      "size_bytes": 9448,
+      "psnr": Infinity,
+      "ssim": 1.0,
+      "encode_time_s": 42.09505387498939,
+      "decode_time_s": 3.4023704169958364
+    },
+    {
+      "codec": "tfc",
+      "clip": "scc_animation_ui",
+      "param_label": "tau=0.02",
+      "rate_kbps": 80.43733333333333,
+      "size_bytes": 15082,
+      "psnr": 51.40961745116476,
+      "ssim": 0.9994611627961176,
+      "encode_time_s": 33.280166917000315,
+      "decode_time_s": 2.4883286249969387
     }
   ],
-  "bd_results": {},
-  "average_bd_rate_pct": 0.0,
-  "average_bd_psnr_db": 0.0
+  "bd_results": {
+    "scc_animation_ui": {
+      "bd_rate_pct": 0.0,
+      "bd_psnr_db": 53.03987109569481
+    },
+    "scc_console_code": {
+      "bd_rate_pct": 0.0,
+      "bd_psnr_db": 0.0
+    },
+    "scc_slideshow": {
+      "bd_rate_pct": 0.0,
+      "bd_psnr_db": 0.0
+    },
+    "scc_web_browsing": {
+      "bd_rate_pct": 472.8470420232186,
+      "bd_psnr_db": 0.0
+    }
+  },
+  "average_bd_rate_pct": 118.21176050580465,
+  "average_bd_psnr_db": 13.259967773923702
 }
