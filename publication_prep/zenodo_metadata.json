@@ -1,0 +1,25 @@
+{
+  "title": "TimeFlowCodec: An Orthogonal Video Coding Architecture for Screen and Synthetic Content via Per-Pixel Temporal Regression",
+  "description": "<p>Modern video coding standards (H.264/AVC, H.265/HEVC, AV1, and H.266/VVC) rely on the canonical hybrid model: spatial block partitioning, 2D Discrete Cosine/Sine Transforms (DCT/DST), and 4:2:0 chroma subsampling. While near-optimal for band-limited natural camera footage, these foundational assumptions break down on synthetic screen content, including software user interfaces, terminal consoles, vector presentations, and digital animation. Sharp graphical boundaries and single-pixel text stems represent mathematical step discontinuities; transforming these structures with truncated 2D Fourier-basis transforms induces severe Gibbs ringing (mosquito noise), while 4:2:0 chroma decimation obliterates syntax highlighting and colored typography. We present <b>TimeFlowCodec</b> (TFC), a video compression architecture that eliminates spatial block transforms in favor of direct 1D per-pixel temporal regression. By modeling the intensity evolution of each pixel over discrete temporal windows using closed-form Ordinary Least Squares (OLS) regression, TFC preserves native 4:4:4 spatial edge fidelity with zero spatial ringing. The resulting bitstream eliminates inter-block spatial dependencies, enabling O(1) working memory state per pixel and highly vectorizable parallel decoding. We outline the theoretical formulation, container specification, and experimental evaluation methodology against standard hybrid codecs.</p>",
+  "upload_type": "publication",
+  "publication_type": "preprint",
+  "creators": [
+    {
+      "name": "Chau, Rich",
+      "affiliation": "University of California, Irvine",
+      "orcid": ""
+    }
+  ],
+  "keywords": [
+    "video compression",
+    "screen content coding",
+    "temporal regression",
+    "ordinary least squares",
+    "Gibbs phenomenon",
+    "rate-distortion",
+    "video codec"
+  ],
+  "access_right": "open",
+  "license": "CC-BY-4.0",
+  "notes": "Preprint manuscript describing the TimeFlowCodec video compression architecture, mathematical formulation, streaming container specification, and empirical JVET-SCC rate-distortion benchmarks."
+}
