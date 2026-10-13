@@ -43,3 +43,17 @@ def cleanup_qt():
         pass
     gc.collect()
 
+
+def pytest_sessionfinish(session, exitstatus):
+    session.config._tfc_exit_status = int(exitstatus)
+
+
+def pytest_unconfigure(config):
+    exitstatus = getattr(config, "_tfc_exit_status", None)
+    if exitstatus is not None:
+        import os
+
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os._exit(exitstatus)
+
