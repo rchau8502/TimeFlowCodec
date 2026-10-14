@@ -55,7 +55,9 @@ Once legal/patent clearance is confirmed:
 2. Scroll to the **Danger Zone** -> Click **Change repository visibility** -> Select **Make public**.
 3. Go to **Pages** in the sidebar:
    - **Source:** Deploy from a branch.
-   - **Branch:** `main` / `docs` folder (or root `/web_player/`).
+   - **Branch:** `main` / `/docs` folder.
+   - *Result:* Serves the official documentation portal at `https://rchau8502.github.io/TimeFlowCodec/` with the interactive WASM player at `/player/` and direct PDF download.
+   - *(Alternative)*: Set Source to **GitHub Actions** and run the pre-configured `Deploy GitHub Pages` workflow (`.github/workflows/pages.yml`).
 4. Update repository README with the assigned Zenodo DOI badge.
 
 ### C. Distribution & Package Indexing
