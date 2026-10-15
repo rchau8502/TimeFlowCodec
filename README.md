@@ -1,5 +1,9 @@
 # TimeFlowCodec — Per-Pixel Temporal Video Codec
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23377926.svg)](https://doi.org/10.5281/zenodo.23377926)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![CI](https://github.com/rchau8502/TimeFlowCodec/actions/workflows/ci.yml/badge.svg)](https://github.com/rchau8502/TimeFlowCodec/actions/workflows/ci.yml)
+
 **TimeFlowCodec (TFC)** is an experimental native codec for **screen content, UI capture, presentations, and animation**. It fits constant or linear temporal functions ($\hat{s}(t) = a + bt$) per coordinate, with fallback samples for pixels that do not fit. It supports full-resolution RGB, bounded video chunks, and a native C decoder. Compression performance depends on content and reconstruction quality.
 
 ## Key Architectural Advantages
@@ -17,11 +21,12 @@
 
 ## Publication & Academic Research
 
-All compiled presentation and academic PDF deliverables are gathered in the dedicated **[`presentation_pdfs/`](presentation_pdfs/)** directory:
+The peer-reviewed / preprint research deliverables are permanently archived with DOI [**10.5281/zenodo.23377926**](https://doi.org/10.5281/zenodo.23377926):
+- **Preprint Paper (Zenodo):** [doi.org/10.5281/zenodo.23377926](https://doi.org/10.5281/zenodo.23377926) | Direct PDF: [`TimeFlowCodec_Manuscript.pdf`](TimeFlowCodec_Manuscript.pdf) / [`presentation_pdfs/TimeFlowCodec_IEEE_Paper.pdf`](presentation_pdfs/TimeFlowCodec_IEEE_Paper.pdf).
+- **Interactive Web Player & Portal:** [rchau8502.github.io/TimeFlowCodec](https://rchau8502.github.io/TimeFlowCodec/)
 - **Presentation Slide Deck:** [`presentation_pdfs/TimeFlowCodec_Presentation_Slides.pdf`](presentation_pdfs/TimeFlowCodec_Presentation_Slides.pdf) (20-slide 16:9 widescreen LaTeX Beamer presentation).
 - **Printable Presentation Handout:** [`presentation_pdfs/TimeFlowCodec_Presentation_Handout.pdf`](presentation_pdfs/TimeFlowCodec_Presentation_Handout.pdf) (10-page 2-on-1 handout layout for print & review).
-- **Master's Thesis Monograph:** [`presentation_pdfs/TimeFlowCodec_Thesis_Monograph.pdf`](presentation_pdfs/TimeFlowCodec_Thesis_Monograph.pdf) / [`TimeFlowCodec.pdf`](TimeFlowCodec.pdf) (55 pages, mathematical derivations, container v5 specs, and benchmarks).
-- **IEEE Conference Paper:** [`presentation_pdfs/TimeFlowCodec_IEEE_Paper.pdf`](presentation_pdfs/TimeFlowCodec_IEEE_Paper.pdf) / [`paper/TimeFlowCodec_IEEE.pdf`](paper/TimeFlowCodec_IEEE.pdf) (5 pages, camera-ready double-column manuscript).
+- **Master's Thesis Monograph:** [`presentation_pdfs/TimeFlowCodec_Thesis_Monograph.pdf`](presentation_pdfs/TimeFlowCodec_Thesis_Monograph.pdf) (55 pages, mathematical derivations, container v5 specs, and benchmarks).
 - **Interactive Defense Presentation:** [`presentation/index.html`](presentation/index.html) (20 slides with embedded interactive 1D Gibbs overshoot & pixel loupe inspector).
 - **Defense Script & Q&A:** [`presentation/SPEAKER_NOTES.md`](presentation/SPEAKER_NOTES.md) (Slide-by-slide 19-minute script + committee Q&A defense guide).
 
@@ -272,6 +277,22 @@ This produces `dist/TimeFlowCodec.app` and `dist/TimeFlowCodec_macbook_installer
 - `main.tex`, `chapters/`, `appendices/`, `figures/` – LaTeX thesis monograph materials
 - `paper/` – IEEE conference manuscript materials
 - `tests/` – comprehensive pytest test suite
+
+## Citation
+
+If you use TimeFlowCodec in your research or system, please cite the permanent Zenodo preprint:
+
+```bibtex
+@article{chau2026timeflowcodec,
+  title     = {TimeFlowCodec: An Orthogonal Video Coding Architecture for Screen and Synthetic Content via Per-Pixel Temporal Regression},
+  author    = {Chau, Rich},
+  year      = {2026},
+  month     = {oct},
+  doi       = {10.5281/zenodo.23377926},
+  url       = {https://doi.org/10.5281/zenodo.23377926},
+  publisher = {Zenodo}
+}
+```
 
 ## License & Copyright
 
