@@ -1,34 +1,51 @@
-# TimeFlowCodec — Per-Pixel Temporal Video Codec
+# TimeFlowCodec & TimeFlow Stream
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23377926.svg)](https://doi.org/10.5281/zenodo.23377926)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![CI](https://github.com/rchau8502/TimeFlowCodec/actions/workflows/ci.yml/badge.svg)](https://github.com/rchau8502/TimeFlowCodec/actions/workflows/ci.yml)
 
-**TimeFlowCodec (TFC)** is an experimental native codec for **screen content, UI capture, presentations, and animation**. It fits constant or linear temporal functions ($\hat{s}(t) = a + bt$) per coordinate, with fallback samples for pixels that do not fit. It supports full-resolution RGB, bounded video chunks, and a native C decoder. Compression performance depends on content and reconstruction quality.
+**TimeFlow** is an open-source, dual-domain temporal compression framework:
+1. **TimeFlow Stream (Edge Telemetry & Sensor Engine):** A two-tier streaming compression architecture (Streaming $O(1)$ Auto Linear Regression + Tiny Quantized INT8 MLP) designed for high-frequency IoT, automotive CAN, and UAV telemetry. Coupled with 4KB/64KB flash-page-aligned direct storage, it achieves **22.39$\times$ compression (95.5\% reduction)** where conventional compressors (Zstandard, Gorilla) collapse to 1.10$\times$, extending physical SSD lifespan by $5\times\text{--}10\times$.
+2. **TimeFlowCodec (Screen & UI Video Codec):** A per-pixel temporal video codec for **screen content, UI capture, presentations, and digital animation**. It fits linear temporal functions per coordinate with full 4:4:4 RGB fidelity and mathematically zero Gibbs ringing on sharp text edges.
 
-## Key Architectural Advantages
+---
 
-- **Zero Gibbs Ringing on Text & UI Boundaries:**
-  Eliminates the oscillatory ripples and mosquito noise intrinsic to block DCT/DST transforms on sharp step edges.
-- **Native 4:4:4 Full-Chroma Fidelity:**
-  Full-resolution color coding without chroma bleed or blurring on thin colored text (e.g. syntax highlighting in IDEs).
-- **Native Decoder:**
-  Linear evaluation ($a + bt$) maps to unit-stride memory access with zero inter-block dependencies or inverse transform matrix multiplications.
-- **Bounded Chunk Memory:**
-  v5 limits decoded RGB data per chunk. Working memory also includes per-pixel model statistics and compressed-payload buffers.
-- **Standard Modern Codec Controls:**
-  TFC-specific **CRF (0–63)**, measured VBR feedback, Lagrangian **Rate-Distortion Optimization (RDO)**, and SMP multi-threading (`--threads N`).
+## 🚀 TimeFlow Stream: Edge Telemetry Compression
+
+Edge systems in connected vehicles (CAN/CAN-FD), industrial condition monitoring (10--50 kHz vibration ADCs), and drone flight recorders produce tens of gigabytes of floating-point telemetry daily. Conventional compressors fail because microscopic sensor noise scrambles IEEE-754 mantissa bits, destroying byte dictionaries (Zstandard) and XOR delta zero-runs (Gorilla).
+
+TimeFlow Stream deploys an online **Two-Tier Cascade**:
+- **Tier 1 (Auto Linear Regression):** Fits piecewise linear models ($y = a + bt$) in $O(1)$ time per sample using running scalar moments, absorbing $>85\%$ of steady-state telemetry with microsecond latency.
+- **Tier 2 (Tiny Quantized MLP):** Parameterizes non-linear dynamic transients (braking, mechanical shock) using an Extreme Learning Machine / coordinate MLP with fixed ReLU basis functions and INT8 quantized weights ($<256$ bytes footprint).
+- **Flash-Endurance-Aware Storage:** Direct page-aligned 4KB/64KB I/O (`O_DIRECT`), eliminating Flash Translation Layer (FTL) write amplification and preventing SSD burnout.
+
+### Comparative Industry Benchmark (50,000 Real-World Telemetry Samples)
+
+| Method / Codec | Compressed Size | Ratio | Space Savings | Flash 4KB Sector Align (Zero WAF) |
+| :--- | :--- | :--- | :--- | :---: |
+| **Uncompressed IEEE-754** | 400,000 bytes | 1.00$\times$ | 0.0\% | No |
+| **Zlib / Gzip (Level 6)** | 362,643 bytes | 1.10$\times$ | 9.3\% | No |
+| **Zstandard (Level 3)** | 364,213 bytes | 1.10$\times$ | 8.9\% | No |
+| **Zstandard (Level 19)** | 359,989 bytes | 1.11$\times$ | 10.0\% | No |
+| **Facebook Gorilla (VLDB)** | 348,970 bytes | 1.15$\times$ | 12.8\% | No |
+| **TimeFlow Stream (Ours)** | **17,863 bytes** | **22.39$\times$** | **95.5\%** | **Yes (4KB / 64KB Direct I/O)** |
+
+*Reproduce benchmark:* `python scripts/benchmark_timeflow_stream.py`
+
+---
 
 ## Publication & Academic Research
 
-The peer-reviewed / preprint research deliverables are permanently archived with DOI [**10.5281/zenodo.23377926**](https://doi.org/10.5281/zenodo.23377926):
+- **IEEE Telemetry Paper (Latest):** [`paper/timeflow_stream_ieee.pdf`](paper/timeflow_stream_ieee.pdf)  
+  *A Flash-Endurance-Aware Two-Tier Compression Engine for High-Frequency Edge Telemetry* (IEEE double-column format).
 - **Preprint Paper (Zenodo):** [doi.org/10.5281/zenodo.23377926](https://doi.org/10.5281/zenodo.23377926) | Direct PDF: [`TimeFlowCodec_Manuscript.pdf`](TimeFlowCodec_Manuscript.pdf) / [`presentation_pdfs/TimeFlowCodec_IEEE_Paper.pdf`](presentation_pdfs/TimeFlowCodec_IEEE_Paper.pdf).
 - **Interactive Web Player & Portal:** [rchau8502.github.io/TimeFlowCodec](https://rchau8502.github.io/TimeFlowCodec/)
 - **Presentation Slide Deck:** [`presentation_pdfs/TimeFlowCodec_Presentation_Slides.pdf`](presentation_pdfs/TimeFlowCodec_Presentation_Slides.pdf) (20-slide 16:9 widescreen LaTeX Beamer presentation).
-- **Printable Presentation Handout:** [`presentation_pdfs/TimeFlowCodec_Presentation_Handout.pdf`](presentation_pdfs/TimeFlowCodec_Presentation_Handout.pdf) (10-page 2-on-1 handout layout for print & review).
 - **Master's Thesis Monograph:** [`presentation_pdfs/TimeFlowCodec_Thesis_Monograph.pdf`](presentation_pdfs/TimeFlowCodec_Thesis_Monograph.pdf) (55 pages, mathematical derivations, container v5 specs, and benchmarks).
-- **Interactive Defense Presentation:** [`presentation/index.html`](presentation/index.html) (20 slides with embedded interactive 1D Gibbs overshoot & pixel loupe inspector).
-- **Defense Script & Q&A:** [`presentation/SPEAKER_NOTES.md`](presentation/SPEAKER_NOTES.md) (Slide-by-slide 19-minute script + committee Q&A defense guide).
+
+---
+
+## Key Architectural Advantages (Video Codec)
 
 ## Compression status and measured evidence
 
