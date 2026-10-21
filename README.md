@@ -1,6 +1,7 @@
 # TimeFlowCodec & TimeFlow Stream
 
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23377926.svg)](https://doi.org/10.5281/zenodo.23377926)
+[![DOI: TimeFlow Stream](https://zenodo.org/badge/DOI/10.5281/zenodo.23540029.svg)](https://doi.org/10.5281/zenodo.23540029)
+[![DOI: TimeFlowCodec](https://zenodo.org/badge/DOI/10.5281/zenodo.23377926.svg)](https://doi.org/10.5281/zenodo.23377926)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![CI](https://github.com/rchau8502/TimeFlowCodec/actions/workflows/ci.yml/badge.svg)](https://github.com/rchau8502/TimeFlowCodec/actions/workflows/ci.yml)
 
@@ -36,7 +37,7 @@ TimeFlow Stream deploys an online **Two-Tier Cascade**:
 
 ## Publication & Academic Research
 
-- **IEEE Telemetry Paper (Latest):** [`paper/timeflow_stream_ieee.pdf`](paper/timeflow_stream_ieee.pdf)  
+- **IEEE Telemetry Paper (Latest, Zenodo DOI):** [doi.org/10.5281/zenodo.23540029](https://doi.org/10.5281/zenodo.23540029) | Direct PDF: [`paper/timeflow_stream_ieee.pdf`](paper/timeflow_stream_ieee.pdf)  
   *A Flash-Endurance-Aware Two-Tier Compression Engine for High-Frequency Edge Telemetry* (IEEE double-column format).
 - **Preprint Paper (Zenodo):** [doi.org/10.5281/zenodo.23377926](https://doi.org/10.5281/zenodo.23377926) | Direct PDF: [`TimeFlowCodec_Manuscript.pdf`](TimeFlowCodec_Manuscript.pdf) / [`presentation_pdfs/TimeFlowCodec_IEEE_Paper.pdf`](presentation_pdfs/TimeFlowCodec_IEEE_Paper.pdf).
 - **Interactive Web Player & Portal:** [rchau8502.github.io/TimeFlowCodec](https://rchau8502.github.io/TimeFlowCodec/)
