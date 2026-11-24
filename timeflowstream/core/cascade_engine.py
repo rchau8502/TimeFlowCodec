@@ -1,8 +1,10 @@
 import struct
 from typing import List, Tuple
-from timeflowstream.core.types import CompressionMode, LinearSegment, MLPSegment
+
 from timeflowstream.core.linear_regression import StreamingLinearRegression
 from timeflowstream.core.tiny_mlp import TinyMLPFitter
+from timeflowstream.core.types import CompressionMode, LinearSegment, MLPSegment
+
 
 class CascadeStreamEngine:
     """
@@ -69,10 +71,25 @@ class CascadeStreamEngine:
         for s in final_segments:
             if isinstance(s, LinearSegment):
                 # Mode 1: [mode(B), channel(H), t_start(d), length(H), intercept(f), slope(f)]
-                payload += struct.pack("<BHdHf f", CompressionMode.MODE_LINEAR, s.channel_id, s.t_start, s.length, s.intercept, s.slope)
+                payload += struct.pack(
+                    "<BHdHf f",
+                    CompressionMode.MODE_LINEAR,
+                    s.channel_id,
+                    s.t_start,
+                    s.length,
+                    s.intercept,
+                    s.slope,
+                )
             elif isinstance(s, MLPSegment):
                 # Mode 2: [mode(B), channel(H), t_start(d), length(H), payload_len(H)] + bytes
-                payload += struct.pack("<BHdHH", CompressionMode.MODE_TINY_MLP, s.channel_id, s.t_start, s.length, len(s.latent_weights))
+                payload += struct.pack(
+                    "<BHdHH",
+                    CompressionMode.MODE_TINY_MLP,
+                    s.channel_id,
+                    s.t_start,
+                    s.length,
+                    len(s.latent_weights),
+                )
                 payload += s.latent_weights
 
         return bytes(payload)
@@ -102,7 +119,13 @@ class CascadeStreamEngine:
                 latent_weights = data[offset:offset+payload_len]
                 offset += payload_len
 
-                mlp_seg = MLPSegment(channel_id=channel_id, t_start=t_start, length=length, latent_weights=latent_weights, mse=0.0)
+                mlp_seg = MLPSegment(
+                    channel_id=channel_id,
+                    t_start=t_start,
+                    length=length,
+                    latent_weights=latent_weights,
+                    mse=0.0,
+                )
                 seg_t = [t_start + float(i) for i in range(length)]
                 seg_y = self.mlp_fitter.reconstruct(mlp_seg, seg_t)
                 all_t.extend(seg_t)

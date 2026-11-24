@@ -1,8 +1,10 @@
-import math
 import struct
 from typing import List
+
 import numpy as np
+
 from timeflowstream.core.types import MLPSegment
+
 
 class TinyMLPFitter:
     """
@@ -18,7 +20,6 @@ class TinyMLPFitter:
     def _compute_basis(self, t_norm: List[float]) -> np.ndarray:
         # X: [N, 2 + H] -> [1 (bias), t (linear), ReLU(t - c_0), ..., ReLU(t - c_{H-1})]
         n = len(t_norm)
-        H = self.hidden_dim
         t_arr = np.array(t_norm, dtype=np.float64)
         c_arr = np.array(self.centers, dtype=np.float64)
         

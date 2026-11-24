@@ -1,5 +1,7 @@
 from typing import Optional
+
 from timeflowstream.core.types import LinearSegment
+
 
 class StreamingLinearRegression:
     """

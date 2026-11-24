@@ -5,13 +5,16 @@ import struct
 import sys
 import time
 import zlib
+
 import zstandard as zstd
 
 # Ensure project root is in sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from typing import Dict, Any, Tuple, List
+from typing import Any, Dict, List, Tuple
+
 from timeflowstream.core.cascade_engine import CascadeStreamEngine
+
 
 def generate_telemetry_trace(num_samples: int = 10000, noise_std: float = 0.02) -> Tuple[List[float], List[float]]:
     random.seed(42)
@@ -51,24 +54,20 @@ def run_full_benchmark(num_samples: int = 10000, noise_std: float = 0.02) -> Dic
     # 1. Zlib
     t0 = time.perf_counter()
     zlib_bytes = zlib.compress(raw_bytes, level=6)
-    t_zlib = time.perf_counter() - t0
 
     # 2. Zstandard Level 3 (Default)
     cctx3 = zstd.ZstdCompressor(level=3)
     t0 = time.perf_counter()
     zstd3_bytes = cctx3.compress(raw_bytes)
-    t_zstd3 = time.perf_counter() - t0
 
     # 3. Zstandard Level 19 (Ultra)
     cctx19 = zstd.ZstdCompressor(level=19)
     t0 = time.perf_counter()
     zstd19_bytes = cctx19.compress(raw_bytes)
-    t_zstd19 = time.perf_counter() - t0
 
     # 4. Gorilla XOR
     t0 = time.perf_counter()
     gorilla_len = run_gorilla_compression(y_vals)
-    t_gorilla = time.perf_counter() - t0
 
     # 5. TimeFlow Stream
     engine = CascadeStreamEngine(tolerance=0.08)
@@ -110,11 +109,18 @@ if __name__ == "__main__":
     print(f"{'Method / Codec':<25} | {'Compressed Size':<16} | {'Ratio':<10} | {'Space Reduction':<15}")
     print("-----------------------------------------------------------------------------------------")
     print(f"{'Uncompressed IEEE-754':<25} | {res['raw_bytes']:>10,} bytes | {'1.00x':<10} | {'0.0%':<15}")
-    print(f"{'Zlib / Gzip (Level 6)':<25} | {res['zlib_bytes']:>10,} bytes | {res['zlib_ratio']:<9.2f}x | {100*(1-1/res['zlib_ratio']):<14.1f}%")
-    print(f"{'Zstandard (Level 3)':<25} | {res['zstd3_bytes']:>10,} bytes | {res['zstd3_ratio']:<9.2f}x | {100*(1-1/res['zstd3_ratio']):<14.1f}%")
-    print(f"{'Zstandard (Level 19)':<25} | {res['zstd19_bytes']:>10,} bytes | {res['zstd19_ratio']:<9.2f}x | {100*(1-1/res['zstd19_ratio']):<14.1f}%")
-    print(f"{'Facebook Gorilla (VLDB)':<25} | {res['gorilla_bytes']:>10,} bytes | {res['gorilla_ratio']:<9.2f}x | {100*(1-1/res['gorilla_ratio']):<14.1f}%")
-    print(f"{'TimeFlow Stream (Ours)':<25} | {res['tfc_bytes']:>10,} bytes | {res['tfc_ratio']:<9.2f}x | {100*(1-1/res['tfc_ratio']):<14.1f}%")
+    rows = [
+        ("Zlib / Gzip (Level 6)", "zlib"),
+        ("Zstandard (Level 3)", "zstd3"),
+        ("Zstandard (Level 19)", "zstd19"),
+        ("Facebook Gorilla (VLDB)", "gorilla"),
+        ("TimeFlow Stream (Ours)", "tfc"),
+    ]
+    for label, key in rows:
+        size = res[f"{key}_bytes"]
+        ratio = res[f"{key}_ratio"]
+        reduction = 100 * (1 - 1 / ratio)
+        print(f"{label:<25} | {size:>10,} bytes | {ratio:<9.2f}x | {reduction:<14.1f}%")
     print("-----------------------------------------------------------------------------------------")
     print(f"TimeFlow Stream Processing Throughput: {res['tfc_speed']:,.0f} samples/sec")
     print(f"Reconstruction Mean Absolute Error:    {res['tfc_mae']:.4f}")

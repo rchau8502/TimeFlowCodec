@@ -1,6 +1,7 @@
 import math
-import pytest
+
 from timeflowstream.core.cascade_engine import CascadeStreamEngine
+
 
 def test_cascade_engine_encodes_and_decodes_mixed_stream():
     engine = CascadeStreamEngine(tolerance=0.08, min_window=4, max_window=64)

@@ -1,6 +1,7 @@
 import math
-import pytest
+
 from timeflowstream.core.tiny_mlp import TinyMLPFitter
+
 
 def test_tiny_mlp_fits_nonlinear_transient():
     # Sinusoidal non-linear pulse (cannot be represented by a single linear line)

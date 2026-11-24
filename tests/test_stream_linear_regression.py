@@ -1,6 +1,7 @@
 import pytest
-from timeflowstream.core.types import LinearSegment
+
 from timeflowstream.core.linear_regression import StreamingLinearRegression
+
 
 def test_constant_signal_compression():
     # Constant signal y = 42.0 for 50 samples

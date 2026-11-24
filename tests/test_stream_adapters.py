@@ -1,7 +1,7 @@
-import pytest
 from timeflowstream.adapters.can_adapter import CANFrameAdapter
 from timeflowstream.adapters.industrial_adapter import IndustrialDAQAdapter
 from timeflowstream.adapters.mavlink_adapter import MAVLinkTelemetryAdapter
+
 
 def test_can_frame_adapter():
     adapter = CANFrameAdapter()

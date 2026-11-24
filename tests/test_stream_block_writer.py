@@ -1,6 +1,7 @@
 import os
-import pytest
+
 from timeflowstream.storage.block_writer import AlignedBlockWriter, CircularRingBufferWriter
+
 
 def test_aligned_block_writer(tmp_path):
     log_file = tmp_path / "test_stream.bin"
